@@ -9,6 +9,7 @@
 #include "twin_model.h"
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QGuiApplication>
 #include <QImage>
 #include <QQmlApplicationEngine>
@@ -93,39 +94,49 @@ int main(int argc, char** argv) {
         link.poseTarget(p, (1u << 4) | (1u << 13), 400);
     });
     struct Step { int atMs; std::function<void()> fn; };
+    // langkah dijadwalkan relatif terhadap saat simulator mencapai READY (render software bisa lambat di awal)
     QList<Step> steps = {
-        {300, [&] { link.connectSim(); }},
-        {2800, [&] {
+        {0, [&] {
             check(link.alive() && link.mode() == 720, "simulator terhubung, mode READY");
             check(link.kinSrc().size() == 22 && link.fbSrc().size() == 22, "GAIT_STATE & SERVO_STATE diterima");
             check(twin.positions().size() == la::studio::gen::LINK_COUNT, "twin punya pose semua link");
             tab(0); shot(QStringLiteral("01_servo.png"));
         }},
-        {3000, [&] { check(motion.loadExample() && motion.frames().size() == 6, "contoh gerak 'lambai' dimuat"); tab(1); }},
-        {3200, [&] { check(motion.upload(0, false), "unggah gerak ke slot 0"); }},
-        {3600, [&] {
+        {200, [&] { check(motion.loadExample() && motion.frames().size() == 6, "contoh gerak 'lambai' dimuat"); tab(1); }},
+        {400, [&] { check(motion.upload(0, false), "unggah gerak ke slot 0"); }},
+        {800, [&] {
             const QVariantList s = link.motionSlots();
             check(!s.isEmpty() && s[0].toMap().value(QStringLiteral("state")).toInt() == 2, "slot 0 siap di robot");
             link.playMotion(0);
         }},
-        {4700, [&] { check(link.mode() == 810, "robot memutar gerak (mode 810)"); shot(QStringLiteral("02_gerak_diputar.png")); }},
-        {8500, [&] { check(link.mode() == 720, "gerak selesai -> READY"); motion.seek(1400); shot(QStringLiteral("03_pratinjau_gerak.png")); }},
-        {8800, [&] {
+        {1900, [&] { check(link.mode() == 810, "robot memutar gerak (mode 810)"); shot(QStringLiteral("02_gerak_diputar.png")); }},
+        {5700, [&] { check(link.mode() == 720, "gerak selesai -> READY"); motion.seek(1400); shot(QStringLiteral("03_pratinjau_gerak.png")); }},
+        {6000, [&] {
             twin.clearPreview(QString());
             livePose->start();                                        // seperti UI: kirim ulang < ttl
         }},
-        {9800, [&] { check(link.mode() == 820, "live pose (mode 820)"); tab(2); shot(QStringLiteral("04_kamera.png")); livePose->stop(); }},
-        {10100, [&] { tab(3); shot(QStringLiteral("05_jalan.png")); }},
-        {10400, [&] { tab(4); shot(QStringLiteral("06_parameter.png")); }},
-        {10700, [&] { tab(5); shot(QStringLiteral("07_log.png")); check(!link.logLines().isEmpty(), "log robot tampil"); }},
-        {11100, [&] {
+        {7000, [&] { check(link.mode() == 820, "live pose (mode 820)"); tab(2); shot(QStringLiteral("04_kamera.png")); livePose->stop(); }},
+        {7300, [&] { tab(3); shot(QStringLiteral("05_jalan.png")); }},
+        {7600, [&] { tab(4); shot(QStringLiteral("06_parameter.png")); }},
+        {7900, [&] { tab(5); shot(QStringLiteral("07_log.png")); check(!link.logLines().isEmpty(), "log robot tampil"); }},
+        {8300, [&] {
             check(g_qmlProblems.isEmpty(), "tidak ada warning/galat QML");
             for (const QString& p : g_qmlProblems) out(QStringLiteral("      QML: ") + p);
             out(QStringLiteral("== selftest studio: %1").arg(failures || !g_qmlProblems.isEmpty() ? "GAGAL" : "lulus"));
             QCoreApplication::exit(failures || !g_qmlProblems.isEmpty() ? 1 : 0);
         }},
     };
-    for (const Step& s : steps) QTimer::singleShot(s.atMs, &app, s.fn);
-    QTimer::singleShot(30000, &app, [out] { out(QStringLiteral("selftest: timeout")); QCoreApplication::exit(3); });
+    QTimer::singleShot(300, &app, [&] { link.connectSim(); });
+    QTimer* waitReady = new QTimer(&app);
+    waitReady->setInterval(50);
+    QElapsedTimer waited; waited.start();
+    QObject::connect(waitReady, &QTimer::timeout, &app, [&, waitReady] {
+        if (!(link.alive() && link.mode() == 720) && waited.elapsed() < 15000) return;
+        waitReady->stop();
+        out(QStringLiteral("      READY setelah %1 ms").arg(waited.elapsed()));
+        for (const Step& st : steps) QTimer::singleShot(st.atMs, &app, st.fn);
+    });
+    waitReady->start();
+    QTimer::singleShot(45000, &app, [out] { out(QStringLiteral("selftest: timeout")); QCoreApplication::exit(3); });
     return app.exec();
 }
