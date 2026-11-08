@@ -127,6 +127,8 @@ private:
     // ---- Fase 2: pose langsung ----
     void poseTarget(const Command& c);
     void livePoseStep();
+    // ---- Fase 3: refleks rintangan ----
+    bool obstacleBlocked() const;
     // ---- util ----
     int64_t now() const { return plat_.nowUs(plat_.ctx); }
     void logf(const char* fmt, ...) LA_PRINTF_FMT(2, 3);
@@ -163,6 +165,9 @@ private:
     float    gx_ = 0, gxs_ = 0, gyaw_ = 0;             // offset tumpu/ayun (mm), yaw (rad)
     int64_t  intentDeadlineUs_ = 0;
     int64_t  poseDeadlineUs_ = 0;
+    int64_t  obstacleDeadlineUs_ = 0;
+    uint16_t obstacleFrontMm_ = 0xFFFF;
+    bool     obstacleBlockLogged_ = false;
     int64_t  lastPoseRejectMs_ = 0;
     int16_t  poseTgt_[2][SERVO_SLOTS]{};
     uint32_t lastGaitRejectMs_ = 0;

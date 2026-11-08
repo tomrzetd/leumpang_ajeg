@@ -36,13 +36,14 @@ CMD_NAMES = {"reset": CMD_RESET, "go": CMD_GO, "stop": CMD_STOP, "cal": CMD_CAL,
 # urutan = enum la::ParamId
 PARAMS = ["fallDeg", "rearmDeg", "imuStaleMs", "servoStep", "trigRollDeg", "trigPitchDeg",
           "footLift", "swayBase", "swayGain", "rollSign", "pitchSign", "imuSwap",
-          "gaitEnable", "gaitStepMax", "gaitYawMaxDeg"]
+          "gaitEnable", "gaitStepMax", "gaitYawMaxDeg", "obstacleStopMm"]
 
 TF_IMU_FRESH, TF_IMU_INIT, TF_CAL_DONE, TF_PERSIST_PENDING, TF_JIKU_LEFT, TF_INTENT_ACTIVE = 1, 2, 4, 8, 16, 32
 
 MODES = {700: "RAW_ANGLES", 705: "FALLEN", 710: "RESET", 720: "READY", 730: "BALANCE", 740: "WALK_INIT",
          750: "WALK_HOLD", 760: "WALK_STEP", 770: "WALK_END", 780: "POSE_HOLD", 790: "ANGLE_DISP",
          791: "MIRROR_DBG", 800: "WALK_CONT", 810: "MOTION_PLAY", 820: "LIVE_POSE"}
+PERCEPTION, EXT = 0x31, 0x60
 
 JOINT_NAMES = [
     ["WAIST", "R SHOULDER P", "R SHOULDER R", "R SHOULDER Y", "R ELBOW", "R HIP Y", "R HIP R",

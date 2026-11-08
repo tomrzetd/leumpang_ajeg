@@ -70,6 +70,7 @@ RuntimeConfig runtimeConfigDefault() {
     c.footLiftMax = 35.0f; c.swayBase = 17.0f; c.swayGain = 17.0f;
     c.imuRollSign = +1; c.imuPitchSign = +1; c.imuSwap = false;
     c.gaitEnable = false; c.gaitStepMax = 10.0f; c.gaitYawMaxRad = 5.0f / kRad2Deg;
+    c.obstacleStopMm = 250.0f;
     return c;
 }
 
@@ -92,6 +93,7 @@ void runtimeConfigSanitize(RuntimeConfig& c) {
     c.gaitEnable      = c.gaitEnable ? true : false;
     c.gaitStepMax     = clampf(fin(c.gaitStepMax, d.gaitStepMax), 0.0f, 25.0f);
     c.gaitYawMaxRad   = clampf(fin(c.gaitYawMaxRad, d.gaitYawMaxRad), 0.0f, 15.0f / kRad2Deg);
+    c.obstacleStopMm  = clampf(fin(c.obstacleStopMm, d.obstacleStopMm), 0.0f, 1500.0f);
 }
 
 static inline int16_t f2i16(float v, int16_t fallback = 0) {
@@ -662,6 +664,7 @@ void Controller::applyRuntimeParam(ParamId id, float v) {
         case ParamId::GAIT_ENABLE:       c.gaitEnable = v >= 0.5f; break;
         case ParamId::GAIT_STEP_MAX:     c.gaitStepMax = v; break;
         case ParamId::GAIT_YAW_MAX_DEG:  c.gaitYawMaxRad = v / kRad2Deg; break;
+        case ParamId::OBSTACLE_STOP_MM:  c.obstacleStopMm = v; break;
         case ParamId::COUNT_:            return;
     }
     runtimeConfigSanitize(c);
@@ -772,6 +775,10 @@ void Controller::handleCommand(const Command& c) {
         case CmdType::GAIT_INTENT: gaitIntent(c); break;
         case CmdType::MOTION_PLAY: motionStart(c.slot); break;
         case CmdType::POSE_TARGET: poseTarget(c); break;
+        case CmdType::PERCEPTION:
+            obstacleFrontMm_ = (uint16_t)clampi((int32_t)c.value, 0, 0xFFFF);
+            obstacleDeadlineUs_ = now() + (int64_t)clampi(c.ttlMs, 0, 1000) * 1000;
+            break;
         case CmdType::MOTION_STOP:
             if (walk_.mode == Mode::MOTION_PLAY) motionEnd(false, "dihentikan");
             break;
@@ -842,6 +849,8 @@ void Controller::snapshot(Telemetry& t) const {
         t.fbAgeMs[b][s] = (uint16_t)(age > 65535 ? 65535 : age);
     }
     t.intentActive = intentDeadlineUs_ > nowUs;
+    t.obstacleBlock = obstacleBlocked();
+    t.obstacleFrontMm = obstacleDeadlineUs_ > nowUs ? obstacleFrontMm_ : 0xFFFF;
     t.intentVx = gaitStride_; t.intentYawDeg = gaitYaw_ * kRad2Deg;
     t.motionSlot = motSlot_; t.motionFrame = motFrame_;
     t.blackboxDropped = bb_ ? bb_->dropped() : 0;
@@ -894,6 +903,13 @@ void Controller::walkContStep() {
     feetCont2(1); armCont(); counterCont();
     if (w.fwct == 0) {                                   // batas langkah
         gaitStride_ += clampf(gaitTgtStride_ - gaitStride_, -3.0f, 3.0f);
+        // Fase 3: refleks rintangan - robot sendiri yang menolak melangkah maju (HP hanya melapor)
+        const bool block = obstacleBlocked();
+        if (block && gaitStride_ > 0.0f) {
+            gaitStride_ = 0.0f;
+            if (!obstacleBlockLogged_) logf("rintangan %u mm di depan: langkah maju diblokir\r\n", (unsigned)obstacleFrontMm_);
+        }
+        obstacleBlockLogged_ = block;
         gaitYaw_    += clampf(gaitTgtYaw_ - gaitYaw_, -1.0f / kRad2Deg, 1.0f / kRad2Deg);
         if (expired && fabsf(gaitStride_) < 0.01f && fabsf(gaitYaw_) < 1e-4f) {
             gaitOfsActive_ = false; gx_ = gxs_ = gyaw_ = 0;
@@ -998,6 +1014,10 @@ void Controller::livePoseStep() {
         return;
     }
     for (uint8_t b = 0; b < 2; ++b) for (uint8_t s = 0; s < SERVO_SLOTS; ++s) *jointSrc(b, s) = poseTgt_[b][s];
+}
+
+bool Controller::obstacleBlocked() const {
+    return cfg_.obstacleStopMm > 0.0f && now() < obstacleDeadlineUs_ && (float)obstacleFrontMm_ < cfg_.obstacleStopMm;
 }
 
 void Controller::blackboxPush(uint32_t loopUs) {

@@ -27,6 +27,8 @@ public:
         bool     (*simHook)(void* ctx, const Packet& p) = nullptr;        // SIM_*; nullptr = tidak didukung
         MotionStore* motions = nullptr;                                    // nullptr = MOTION_* UNSUPPORTED
         void     (*motionSaved)(void* ctx, int slot, const uint8_t* d, size_t n) = nullptr;  // simpan ke SD
+        // Fase 3: Leumpang Bus. Modul HAL menerima topik EXT dari host (nullptr = EXT UNSUPPORTED).
+        bool     (*extHook)(void* ctx, uint16_t topic, const uint8_t* d, size_t n) = nullptr;
     };
     static constexpr uint32_t LINK_TIMEOUT_MS = 3000;
 
@@ -34,6 +36,7 @@ public:
     void onBytes(const uint8_t* d, size_t n, uint32_t nowMs);
     void poll(uint32_t nowMs);              // panggil >= 50 Hz
     void sendLog(const char* line);         // kirim LOG bila link aktif & logOn
+    bool sendExt(uint16_t topic, const uint8_t* d, size_t n);   // terbitkan topik EXT ke host
     bool linkActive() const { return active_; }
     bool rxRecent(uint32_t nowMs) const { return dec_.frames && nowMs - lastRxMs_ <= LINK_TIMEOUT_MS; }
     const Decoder& decoder() const { return dec_; }

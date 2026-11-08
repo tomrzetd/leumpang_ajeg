@@ -227,5 +227,28 @@ int main() {
     box.c.push_back(lp); step(2);
     Command fin0 = lp; fin0.ttlMs = 0; box.c.push_back(fin0); step(1);
     CHECK(T().mode == Mode::RESET, "POSE_TARGET ttl=0 -> selesai, ramp HOME");
+
+    // ================= Fase 3: refleks rintangan (PERCEPTION) =================
+    step(110);
+    box.k.push_back('g'); step(3);
+    Command g3{}; g3.type = CmdType::GAIT_INTENT; g3.value = 9; g3.ttlMs = 500;
+    Command ob{}; ob.type = CmdType::PERCEPTION; ob.value = 150; ob.ttlMs = 400;   // 150 mm < 250 mm
+    float maxFwd = 0; bool flagSeen = false;
+    for (int i = 0; i < 200; ++i) {
+        if (i % 20 == 0) { box.c.push_back(g3); box.c.push_back(ob); }
+        step(1); t = T();
+        maxFwd = t.intentVx > maxFwd ? t.intentVx : maxFwd; flagSeen |= t.obstacleBlock;
+    }
+    CHECK(T().mode == Mode::WALK_CONT && maxFwd == 0.0f && flagSeen && T().obstacleFrontMm == 150,
+          "rintangan 150 mm: robot melangkah di tempat, maju diblokir firmware");
+    ob.value = 900;
+    for (int i = 0; i < 200; ++i) { if (i % 20 == 0) { box.c.push_back(g3); box.c.push_back(ob); } step(1); }
+    CHECK(T().intentVx > 5.0f && !T().obstacleBlock, "rintangan menjauh (900 mm): langkah maju kembali");
+    ob.value = 100; box.c.push_back(ob); step(1);
+    for (int i = 0; i < 80; ++i) { if (i % 20 == 0) box.c.push_back(g3); step(1); }       // laporan HP basi
+    CHECK(!T().obstacleBlock && T().obstacleFrontMm == 0xFFFF, "laporan rintangan kedaluwarsa (ttl) tidak memblokir");
+    Command mundur = g3; mundur.value = -6; ob.ttlMs = 1000; box.c.push_back(ob);
+    for (int i = 0; i < 120; ++i) { if (i % 20 == 0) { box.c.push_back(mundur); box.c.push_back(ob); } step(1); }
+    CHECK(T().intentVx < -2.0f, "mundur tetap diizinkan saat ada rintangan di depan");
     return checkSummary("test_controller");
 }

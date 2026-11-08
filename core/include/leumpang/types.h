@@ -16,7 +16,7 @@
 namespace la {
 
 // ---- Versi ----------------------------------------------------------------
-constexpr uint8_t CORE_VER_MAJOR = 0, CORE_VER_MINOR = 7, CORE_VER_PATCH = 0;
+constexpr uint8_t CORE_VER_MAJOR = 0, CORE_VER_MINOR = 8, CORE_VER_PATCH = 0;
 
 // ---- Servo ICS 3.5 ----------------------------------------------------------
 constexpr uint32_t ICS_BAUD     = 1250000;   // 8E1
@@ -92,6 +92,8 @@ struct RuntimeConfig {
     bool     gaitEnable;        // default false: GAIT_INTENT ditolak
     float    gaitStepMax;       // mm per langkah (|vx|)
     float    gaitYawMaxRad;     // rad per langkah
+    // ---- Fase 3: refleks rintangan dari HP ----
+    float    obstacleStopMm;    // rintangan depan lebih dekat -> tidak melangkah maju (0 = mati)
 };
 RuntimeConfig runtimeConfigDefault();
 void runtimeConfigSanitize(RuntimeConfig& c);
@@ -104,11 +106,11 @@ struct ServoPositions {
 
 // ---- Perintah -------------------------------------------------------------
 enum class CmdType : uint8_t { RESET, GO, STOP, CALIBRATE, SET_PARAM, SET_TRIM,
-                               GAIT_INTENT, MOTION_PLAY, MOTION_STOP, POSE_TARGET };
+                               GAIT_INTENT, MOTION_PLAY, MOTION_STOP, POSE_TARGET, PERCEPTION };
 enum class ParamId : uint8_t {
     FALL_DEG, REARM_DEG, IMU_STALE_MS, SERVO_STEP, TRIGGER_ROLL_DEG,
     TRIGGER_PITCH_DEG, FOOT_LIFT, SWAY_BASE, SWAY_GAIN, SIGN_ROLL,
-    SIGN_PITCH, IMU_SWAP, GAIT_ENABLE, GAIT_STEP_MAX, GAIT_YAW_MAX_DEG, COUNT_
+    SIGN_PITCH, IMU_SWAP, GAIT_ENABLE, GAIT_STEP_MAX, GAIT_YAW_MAX_DEG, OBSTACLE_STOP_MM, COUNT_
 };
 struct Command {
     CmdType  type;
@@ -154,6 +156,8 @@ struct Telemetry {
     uint32_t ctrlStackFree;   // diisi HAL (0 = tidak diketahui)
     // Fase 1
     bool     intentActive;
+    bool     obstacleBlock;      // Fase 3: refleks rintangan aktif (maju diblokir)
+    uint16_t obstacleFrontMm;    // jarak rintangan depan terakhir (0xFFFF = tidak ada / kedaluwarsa)
     float    intentVx, intentYawDeg;
     int8_t   motionSlot;      // -1 = tidak memutar
     uint8_t  motionFrame;

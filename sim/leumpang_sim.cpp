@@ -206,11 +206,14 @@ int main(int argc, char** argv) {
     la::lap::Hello self;
     self.role = la::lap::ROLE_SIM; self.board = la::lap::BOARD_SIM;
     self.fwMajor = la::CORE_VER_MAJOR; self.fwMinor = la::CORE_VER_MINOR; self.fwPatch = la::CORE_VER_PATCH;
-    self.caps = la::lap::CAP_SIM | la::lap::CAP_MOTION | la::lap::CAP_GAIT_INTENT | la::lap::CAP_LIVE_POSE | (g_bbFile ? (uint32_t)la::lap::CAP_SD : 0u);
+    self.caps = la::lap::CAP_SIM | la::lap::CAP_MOTION | la::lap::CAP_GAIT_INTENT | la::lap::CAP_LIVE_POSE | la::lap::CAP_PERCEPTION | la::lap::CAP_EXT | (g_bbFile ? (uint32_t)la::lap::CAP_SD : 0u);
     strncpy(self.name, "leumpang-sim", 16);
     la::lap::LapEndpoint::Host h;
     h.write = epWrite; h.submit = epSubmit; h.snapshot = epSnapshot; h.simHook = epSim;
     h.motions = &g_ctrl.motions();
+    h.extHook = [](void*, uint16_t topic, const uint8_t* d, size_t n) {      // Leumpang Bus: 0x0001 = echo
+        return topic == 0x0001 && g_ep.sendExt(0x0001, d, n);
+    };
     h.motionSaved = [](void*, int slot, const uint8_t*, size_t n) {
         printf("[sim] motion slot %d diunggah (%zu B)\n", slot, n); fflush(stdout); };
 

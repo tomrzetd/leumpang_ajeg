@@ -22,7 +22,8 @@ Item {
         { id: 11, name: "Tukar roll/pitch IMU",  unit: "0/1" },
         { id: 12, name: "Gait kontinu aktif",    unit: "0/1" },
         { id: 13, name: "Langkah gait maks",     unit: "mm" },
-        { id: 14, name: "Belok gait maks",       unit: "°/langkah" }
+        { id: 14, name: "Belok gait maks",       unit: "°/langkah" },
+        { id: 15, name: "Henti rintangan (HP)",  unit: "mm, 0 = mati" }
     ]
 
     ColumnLayout {

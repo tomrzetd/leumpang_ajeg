@@ -50,7 +50,7 @@ void SimRobot::start(Sink toHost, LogSink log, bool randomStart) {
     lap::Hello self;
     self.role = lap::ROLE_SIM; self.board = lap::BOARD_SIM;
     self.fwMajor = CORE_VER_MAJOR; self.fwMinor = CORE_VER_MINOR; self.fwPatch = CORE_VER_PATCH;
-    self.caps = lap::CAP_SIM | lap::CAP_MOTION | lap::CAP_GAIT_INTENT | lap::CAP_LIVE_POSE;
+    self.caps = lap::CAP_SIM | lap::CAP_MOTION | lap::CAP_GAIT_INTENT | lap::CAP_LIVE_POSE | lap::CAP_PERCEPTION;
     strncpy(self.name, "studio-sim", 16);
     lap::LapEndpoint::Host h;
     h.ctx = this;

@@ -190,7 +190,21 @@ void LapEndpoint::handle(const Packet& p, uint32_t nowMs) {
             return;
         case PONG: case ACK:
             return;
-        default:   // PERCEPTION: Fase 3
+        case PERCEPTION: {
+            PerceptionMsg m;
+            if (!parsePacket(p, m)) { ack(p, BAD_LEN); return; }
+            Command c{}; c.type = CmdType::PERCEPTION; c.ttlMs = m.ttlMs; c.value = (float)m.frontMin();
+            submit(c);
+            return;
+        }
+        case EXT: {
+            ExtMsg m;
+            if (!parsePacket(p, m)) { ack(p, BAD_LEN); return; }
+            if (!h_.extHook) { ack(p, UNSUPPORTED); return; }
+            ack(p, h_.extHook(h_.ctx, m.topic, m.data, m.len) ? OK : BAD_VALUE);
+            return;
+        }
+        default:
             ack(p, UNSUPPORTED);
             return;
     }
@@ -209,6 +223,14 @@ void LapEndpoint::poll(uint32_t nowMs) {
     if (servo) { ServoStateMsg m; fillServoState(snap_, m);       send(SERVO_STATE, m); lastServo_ = nowMs; }
     if (gait)  { GaitStateMsg m;  fillGaitState(snap_, m);        send(GAIT_STATE, m);  lastGait_ = nowMs; }
     if (snap_.cfgGen != lastCfgGen_) sendConfig();      // config berubah -> broadcast
+}
+
+bool LapEndpoint::sendExt(uint16_t topic, const uint8_t* d, size_t n) {
+    if (!active_ || n > ExtMsg::MAX_DATA) return false;
+    ExtMsg m; m.topic = topic; m.len = (uint8_t)n;
+    if (n) memcpy(m.data, d, n);
+    send(EXT, m);
+    return true;
 }
 
 void LapEndpoint::sendLog(const char* line) {

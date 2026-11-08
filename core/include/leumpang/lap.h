@@ -37,13 +37,14 @@ enum MsgType : uint8_t {
     SET_TRIM     = 0x22,
     STREAM_CFG   = 0x23,
     GAIT_INTENT  = 0x30,   // HP -> robot (Fase 1)
-    PERCEPTION   = 0x31,   // HP -> robot (Fase 1/3)
+    PERCEPTION   = 0x31,   // HP -> robot (Fase 3): rintangan per sektor + orang
     MOTION_BEGIN = 0x40,   // (Fase 1)
     MOTION_CHUNK = 0x41,
     MOTION_END   = 0x42,
     MOTION_PLAY  = 0x43,
     MOTION_STATUS= 0x44,   // robot -> host: isi 4 slot
     POSE_TARGET  = 0x45,   // host -> robot (Fase 2): pose langsung, mode 820
+    EXT          = 0x60,   // dua arah (Fase 3): Leumpang Bus - topik modul/sensor tambahan
     SIM_IMU      = 0x70,   // hanya simulator
     SIM_FAULT    = 0x71,
 };
@@ -56,11 +57,13 @@ enum CmdId : uint8_t { CMD_RESET = 0, CMD_GO = 1, CMD_STOP = 2, CMD_CAL = 3, CMD
 enum Caps  : uint32_t {
     CAP_WIFI = 1u << 0, CAP_SD = 1u << 1, CAP_GAIT_INTENT = 1u << 2, CAP_MOTION = 1u << 3,
     CAP_SIM = 1u << 4, CAP_LCD = 1u << 5, CAP_USB_CDC = 1u << 6, CAP_LIVE_POSE = 1u << 7,
+    CAP_PERCEPTION = 1u << 8, CAP_EXT = 1u << 9,
 };
 // Flag TELEMETRY
 enum TeleFlags : uint16_t {
     TF_IMU_FRESH = 1u << 0, TF_IMU_INIT = 1u << 1, TF_CAL_DONE = 1u << 2,
     TF_PERSIST_PENDING = 1u << 3, TF_JIKU_LEFT = 1u << 4, TF_INTENT_ACTIVE = 1u << 5,
+    TF_OBSTACLE_BLOCK = 1u << 6,
 };
 
 // ---- primitif ---------------------------------------------------------------
@@ -228,6 +231,49 @@ struct MotionPlayMsg  { uint8_t slot = 0, play = 1;
 struct MotionStatusMsg { uint8_t state[4]{}, nFrames[4]{}; char name[4][17]{};
     void enc(Writer& w) const { for (int i = 0; i < 4; ++i) { w.u8(state[i]); w.u8(nFrames[i]); w.fixstr(name[i], 16); } }
     bool dec(Reader& r) { for (int i = 0; i < 4; ++i) { state[i] = r.u8(); nFrames[i] = r.u8(); r.fixstr(name[i], 16); } return r.ok(); } };
+// Rintangan dari HP: n sektor merata dari -halfFov (kanan) .. +halfFov (kiri), jarak mm (0xFFFF = bebas/tak diketahui).
+struct PerceptionMsg {
+    static constexpr int MAX_SECTORS = 16;
+    uint16_t ttlMs = 0; uint8_t flags = 0, n = 0; int16_t halfFovDeg10 = 300;
+    uint16_t distMm[MAX_SECTORS]{};
+    int16_t personBearingDeg10 = 0; uint16_t personDistMm = 0xFFFF;
+    void enc(Writer& w) const {
+        w.u16(ttlMs); w.u8(flags); w.u8(n); w.i16(halfFovDeg10);
+        for (int i = 0; i < n && i < MAX_SECTORS; ++i) w.u16(distMm[i]);
+        w.i16(personBearingDeg10); w.u16(personDistMm);
+    }
+    bool dec(Reader& r) {
+        ttlMs = r.u16(); flags = r.u8(); n = r.u8(); halfFovDeg10 = r.i16();
+        if (n == 0 || n > MAX_SECTORS) return false;
+        for (int i = 0; i < n; ++i) distMm[i] = r.u16();
+        personBearingDeg10 = r.i16(); personDistMm = r.u16();
+        return r.ok();
+    }
+    // jarak terdekat di sektor yang pusatnya dalam +-coneDeg dari depan
+    uint16_t frontMin(float coneDeg = 30.0f) const {
+        uint16_t m = 0xFFFF;
+        const float half = halfFovDeg10 / 10.0f, w = 2.0f * half / (float)(n ? n : 1);
+        for (int i = 0; i < n; ++i) {
+            const float c = -half + ((float)i + 0.5f) * w;
+            if (c >= -coneDeg && c <= coneDeg && distMm[i] < m) m = distMm[i];
+        }
+        return m;
+    }
+};
+// Leumpang Bus di atas LAP: topik 16 bit + data mentah. 0x0000-0x0FFF dicadangkan core, 0x1000+ modul pengguna.
+struct ExtMsg {
+    static constexpr size_t MAX_DATA = MAX_BODY - 2;
+    uint16_t topic = 0; uint8_t len = 0; uint8_t data[MAX_DATA]{};
+    void enc(Writer& w) const { w.u16(topic); w.bytes(data, len); }
+    bool dec(Reader& r) {
+        topic = r.u16();
+        const size_t k = r.remaining();
+        len = (uint8_t)(k > MAX_DATA ? MAX_DATA : k);
+        for (size_t i = 0; i < len; ++i) data[i] = r.u8();
+        return r.ok();
+    }
+};
+
 struct PoseTargetMsg {                    // 4 + 2 + 44 = 50 B
     uint32_t mask = 0; uint16_t ttlMs = 0; int16_t joint[2][SERVO_SLOTS]{};
     void enc(Writer& w) const { w.u32(mask); w.u16(ttlMs); for (auto& b : joint) for (int16_t v : b) w.i16(v); }
