@@ -9,3 +9,6 @@ __pycache__/
 .vscode/
 .idea/
 *.ppm
+android/.gradle/
+android/**/build/
+android/local.properties

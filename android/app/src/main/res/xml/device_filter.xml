@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Board robot via USB-OTG: CDC-ACM (STM32 TinyUSB, ESP32-P4 USB-Serial-JTAG) dan jembatan USB-UART (S3: CP210x / CH340) -->
+<resources>
+    <usb-device class="2" />
+    <usb-device vendor-id="4617" product-id="1" />  <!-- 0x1209:0x0001 leumpang-h562 -->
+    <usb-device vendor-id="12346" />                  <!-- 0x303A Espressif -->
+    <usb-device vendor-id="4292" />                   <!-- 0x10C4 Silabs CP210x -->
+    <usb-device vendor-id="6790" />                   <!-- 0x1A86 QinHeng CH340 -->
+</resources>
