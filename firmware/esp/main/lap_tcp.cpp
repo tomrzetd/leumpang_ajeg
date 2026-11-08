@@ -40,7 +40,7 @@ void lapTask(void*) {
     la::lap::Hello self;
     self.role = la::lap::ROLE_ROBOT; self.board = LA_BOARD_ID;
     self.fwMajor = la::CORE_VER_MAJOR; self.fwMinor = la::CORE_VER_MINOR; self.fwPatch = la::CORE_VER_PATCH;
-    self.caps = la::lap::CAP_WIFI | la::lap::CAP_LCD | la::lap::CAP_MOTION | la::lap::CAP_GAIT_INTENT |
+    self.caps = la::lap::CAP_WIFI | la::lap::CAP_LCD | la::lap::CAP_MOTION | la::lap::CAP_GAIT_INTENT | la::lap::CAP_LIVE_POSE |
                 (storage_sd_ok() ? (uint32_t)la::lap::CAP_SD : 0u);
     strncpy(self.name, LA_BOARD_NAME, 16);
     la::lap::LapEndpoint::Host h;

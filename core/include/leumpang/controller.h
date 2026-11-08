@@ -124,6 +124,9 @@ private:
     void motionStep();
     void motionEnd(bool returnHome, const char* why);
     void blackboxPush(uint32_t loopUs);
+    // ---- Fase 2: pose langsung ----
+    void poseTarget(const Command& c);
+    void livePoseStep();
     // ---- util ----
     int64_t now() const { return plat_.nowUs(plat_.ctx); }
     void logf(const char* fmt, ...) __attribute__((format(printf, 2, 3)));
@@ -159,6 +162,9 @@ private:
     float    gaitTgtStride_ = 0, gaitTgtYaw_ = 0;      // target dari niat
     float    gx_ = 0, gxs_ = 0, gyaw_ = 0;             // offset tumpu/ayun (mm), yaw (rad)
     int64_t  intentDeadlineUs_ = 0;
+    int64_t  poseDeadlineUs_ = 0;
+    int64_t  lastPoseRejectMs_ = 0;
+    int16_t  poseTgt_[2][SERVO_SLOTS]{};
     uint32_t lastGaitRejectMs_ = 0;
 
     // motion player

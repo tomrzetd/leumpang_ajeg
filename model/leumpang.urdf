@@ -1,0 +1,188 @@
+<?xml version="1.0"?>
+<!-- dibangkitkan tools/gen_model.py - jangan diedit manual -->
+<robot name="leumpang_ajeg">
+  <material name="servo"><color rgba="0.11 0.12 0.13 1"/></material>
+  <material name="alu"><color rgba="0.74 0.76 0.79 1"/></material>
+  <material name="shell"><color rgba="0.91 0.9 0.87 1"/></material>
+  <material name="accent"><color rgba="0.91 0.42 0.11 1"/></material>
+  <material name="rubber"><color rgba="0.05 0.05 0.05 1"/></material>
+  <material name="glass"><color rgba="0.02 0.02 0.03 1"/></material>
+  <material name="phone"><color rgba="0.16 0.17 0.19 1"/></material>
+  <link name="pelvis">
+    <visual><geometry><mesh filename="meshes/pelvis.servo.stl" scale="0.001 0.001 0.001"/></geometry><material name="servo"/></visual>
+    <visual><geometry><mesh filename="meshes/pelvis.accent.stl" scale="0.001 0.001 0.001"/></geometry><material name="accent"/></visual>
+    <visual><geometry><mesh filename="meshes/pelvis.alu.stl" scale="0.001 0.001 0.001"/></geometry><material name="alu"/></visual>
+    <visual><geometry><mesh filename="meshes/pelvis.shell.stl" scale="0.001 0.001 0.001"/></geometry><material name="shell"/></visual>
+  </link>
+  <link name="chest">
+    <visual><geometry><mesh filename="meshes/chest.shell.stl" scale="0.001 0.001 0.001"/></geometry><material name="shell"/></visual>
+    <visual><geometry><mesh filename="meshes/chest.accent.stl" scale="0.001 0.001 0.001"/></geometry><material name="accent"/></visual>
+    <visual><geometry><mesh filename="meshes/chest.glass.stl" scale="0.001 0.001 0.001"/></geometry><material name="glass"/></visual>
+    <visual><geometry><mesh filename="meshes/chest.servo.stl" scale="0.001 0.001 0.001"/></geometry><material name="servo"/></visual>
+    <visual><geometry><mesh filename="meshes/chest.alu.stl" scale="0.001 0.001 0.001"/></geometry><material name="alu"/></visual>
+  </link>
+  <link name="phone">
+    <visual><geometry><mesh filename="meshes/phone.phone.stl" scale="0.001 0.001 0.001"/></geometry><material name="phone"/></visual>
+    <visual><geometry><mesh filename="meshes/phone.glass.stl" scale="0.001 0.001 0.001"/></geometry><material name="glass"/></visual>
+    <visual><geometry><mesh filename="meshes/phone.alu.stl" scale="0.001 0.001 0.001"/></geometry><material name="alu"/></visual>
+  </link>
+  <link name="head">
+    <visual><geometry><mesh filename="meshes/head.alu.stl" scale="0.001 0.001 0.001"/></geometry><material name="alu"/></visual>
+    <visual><geometry><mesh filename="meshes/head.shell.stl" scale="0.001 0.001 0.001"/></geometry><material name="shell"/></visual>
+    <visual><geometry><mesh filename="meshes/head.glass.stl" scale="0.001 0.001 0.001"/></geometry><material name="glass"/></visual>
+    <visual><geometry><mesh filename="meshes/head.accent.stl" scale="0.001 0.001 0.001"/></geometry><material name="accent"/></visual>
+  </link>
+  <link name="r_shoulder">
+    <visual><geometry><mesh filename="meshes/r_shoulder.alu.stl" scale="0.001 0.001 0.001"/></geometry><material name="alu"/></visual>
+    <visual><geometry><mesh filename="meshes/r_shoulder.servo.stl" scale="0.001 0.001 0.001"/></geometry><material name="servo"/></visual>
+    <visual><geometry><mesh filename="meshes/r_shoulder.accent.stl" scale="0.001 0.001 0.001"/></geometry><material name="accent"/></visual>
+  </link>
+  <link name="r_upperarm">
+    <visual><geometry><mesh filename="meshes/r_upperarm.alu.stl" scale="0.001 0.001 0.001"/></geometry><material name="alu"/></visual>
+    <visual><geometry><mesh filename="meshes/r_upperarm.servo.stl" scale="0.001 0.001 0.001"/></geometry><material name="servo"/></visual>
+    <visual><geometry><mesh filename="meshes/r_upperarm.accent.stl" scale="0.001 0.001 0.001"/></geometry><material name="accent"/></visual>
+  </link>
+  <link name="r_upperarm2">
+    <visual><geometry><mesh filename="meshes/r_upperarm2.shell.stl" scale="0.001 0.001 0.001"/></geometry><material name="shell"/></visual>
+    <visual><geometry><mesh filename="meshes/r_upperarm2.servo.stl" scale="0.001 0.001 0.001"/></geometry><material name="servo"/></visual>
+    <visual><geometry><mesh filename="meshes/r_upperarm2.accent.stl" scale="0.001 0.001 0.001"/></geometry><material name="accent"/></visual>
+    <visual><geometry><mesh filename="meshes/r_upperarm2.alu.stl" scale="0.001 0.001 0.001"/></geometry><material name="alu"/></visual>
+  </link>
+  <link name="r_forearm">
+    <visual><geometry><mesh filename="meshes/r_forearm.alu.stl" scale="0.001 0.001 0.001"/></geometry><material name="alu"/></visual>
+    <visual><geometry><mesh filename="meshes/r_forearm.shell.stl" scale="0.001 0.001 0.001"/></geometry><material name="shell"/></visual>
+    <visual><geometry><mesh filename="meshes/r_forearm.servo.stl" scale="0.001 0.001 0.001"/></geometry><material name="servo"/></visual>
+  </link>
+  <link name="l_shoulder">
+    <visual><geometry><mesh filename="meshes/l_shoulder.alu.stl" scale="0.001 0.001 0.001"/></geometry><material name="alu"/></visual>
+    <visual><geometry><mesh filename="meshes/l_shoulder.servo.stl" scale="0.001 0.001 0.001"/></geometry><material name="servo"/></visual>
+    <visual><geometry><mesh filename="meshes/l_shoulder.accent.stl" scale="0.001 0.001 0.001"/></geometry><material name="accent"/></visual>
+  </link>
+  <link name="l_upperarm">
+    <visual><geometry><mesh filename="meshes/l_upperarm.alu.stl" scale="0.001 0.001 0.001"/></geometry><material name="alu"/></visual>
+    <visual><geometry><mesh filename="meshes/l_upperarm.servo.stl" scale="0.001 0.001 0.001"/></geometry><material name="servo"/></visual>
+    <visual><geometry><mesh filename="meshes/l_upperarm.accent.stl" scale="0.001 0.001 0.001"/></geometry><material name="accent"/></visual>
+  </link>
+  <link name="l_upperarm2">
+    <visual><geometry><mesh filename="meshes/l_upperarm2.shell.stl" scale="0.001 0.001 0.001"/></geometry><material name="shell"/></visual>
+    <visual><geometry><mesh filename="meshes/l_upperarm2.servo.stl" scale="0.001 0.001 0.001"/></geometry><material name="servo"/></visual>
+    <visual><geometry><mesh filename="meshes/l_upperarm2.accent.stl" scale="0.001 0.001 0.001"/></geometry><material name="accent"/></visual>
+    <visual><geometry><mesh filename="meshes/l_upperarm2.alu.stl" scale="0.001 0.001 0.001"/></geometry><material name="alu"/></visual>
+  </link>
+  <link name="l_forearm">
+    <visual><geometry><mesh filename="meshes/l_forearm.alu.stl" scale="0.001 0.001 0.001"/></geometry><material name="alu"/></visual>
+    <visual><geometry><mesh filename="meshes/l_forearm.shell.stl" scale="0.001 0.001 0.001"/></geometry><material name="shell"/></visual>
+    <visual><geometry><mesh filename="meshes/l_forearm.servo.stl" scale="0.001 0.001 0.001"/></geometry><material name="servo"/></visual>
+  </link>
+  <link name="r_hip_yaw">
+    <visual><geometry><mesh filename="meshes/r_hip_yaw.alu.stl" scale="0.001 0.001 0.001"/></geometry><material name="alu"/></visual>
+    <visual><geometry><mesh filename="meshes/r_hip_yaw.servo.stl" scale="0.001 0.001 0.001"/></geometry><material name="servo"/></visual>
+    <visual><geometry><mesh filename="meshes/r_hip_yaw.accent.stl" scale="0.001 0.001 0.001"/></geometry><material name="accent"/></visual>
+  </link>
+  <link name="r_hip_roll">
+    <visual><geometry><mesh filename="meshes/r_hip_roll.alu.stl" scale="0.001 0.001 0.001"/></geometry><material name="alu"/></visual>
+    <visual><geometry><mesh filename="meshes/r_hip_roll.servo.stl" scale="0.001 0.001 0.001"/></geometry><material name="servo"/></visual>
+    <visual><geometry><mesh filename="meshes/r_hip_roll.accent.stl" scale="0.001 0.001 0.001"/></geometry><material name="accent"/></visual>
+  </link>
+  <link name="r_thigh">
+    <visual><geometry><mesh filename="meshes/r_thigh.alu.stl" scale="0.001 0.001 0.001"/></geometry><material name="alu"/></visual>
+    <visual><geometry><mesh filename="meshes/r_thigh.shell.stl" scale="0.001 0.001 0.001"/></geometry><material name="shell"/></visual>
+    <visual><geometry><mesh filename="meshes/r_thigh.servo.stl" scale="0.001 0.001 0.001"/></geometry><material name="servo"/></visual>
+    <visual><geometry><mesh filename="meshes/r_thigh.accent.stl" scale="0.001 0.001 0.001"/></geometry><material name="accent"/></visual>
+  </link>
+  <link name="r_shin">
+    <visual><geometry><mesh filename="meshes/r_shin.alu.stl" scale="0.001 0.001 0.001"/></geometry><material name="alu"/></visual>
+    <visual><geometry><mesh filename="meshes/r_shin.shell.stl" scale="0.001 0.001 0.001"/></geometry><material name="shell"/></visual>
+    <visual><geometry><mesh filename="meshes/r_shin.accent.stl" scale="0.001 0.001 0.001"/></geometry><material name="accent"/></visual>
+    <visual><geometry><mesh filename="meshes/r_shin.servo.stl" scale="0.001 0.001 0.001"/></geometry><material name="servo"/></visual>
+  </link>
+  <link name="r_ankle">
+    <visual><geometry><mesh filename="meshes/r_ankle.alu.stl" scale="0.001 0.001 0.001"/></geometry><material name="alu"/></visual>
+    <visual><geometry><mesh filename="meshes/r_ankle.servo.stl" scale="0.001 0.001 0.001"/></geometry><material name="servo"/></visual>
+    <visual><geometry><mesh filename="meshes/r_ankle.accent.stl" scale="0.001 0.001 0.001"/></geometry><material name="accent"/></visual>
+  </link>
+  <link name="r_foot">
+    <visual><geometry><mesh filename="meshes/r_foot.alu.stl" scale="0.001 0.001 0.001"/></geometry><material name="alu"/></visual>
+    <visual><geometry><mesh filename="meshes/r_foot.rubber.stl" scale="0.001 0.001 0.001"/></geometry><material name="rubber"/></visual>
+    <visual><geometry><mesh filename="meshes/r_foot.accent.stl" scale="0.001 0.001 0.001"/></geometry><material name="accent"/></visual>
+    <collision><origin xyz="0.009 0 -0.0215"/><geometry><box size="0.096 0.058 0.004"/></geometry></collision>
+  </link>
+  <link name="l_hip_yaw">
+    <visual><geometry><mesh filename="meshes/l_hip_yaw.alu.stl" scale="0.001 0.001 0.001"/></geometry><material name="alu"/></visual>
+    <visual><geometry><mesh filename="meshes/l_hip_yaw.servo.stl" scale="0.001 0.001 0.001"/></geometry><material name="servo"/></visual>
+    <visual><geometry><mesh filename="meshes/l_hip_yaw.accent.stl" scale="0.001 0.001 0.001"/></geometry><material name="accent"/></visual>
+  </link>
+  <link name="l_hip_roll">
+    <visual><geometry><mesh filename="meshes/l_hip_roll.alu.stl" scale="0.001 0.001 0.001"/></geometry><material name="alu"/></visual>
+    <visual><geometry><mesh filename="meshes/l_hip_roll.servo.stl" scale="0.001 0.001 0.001"/></geometry><material name="servo"/></visual>
+    <visual><geometry><mesh filename="meshes/l_hip_roll.accent.stl" scale="0.001 0.001 0.001"/></geometry><material name="accent"/></visual>
+  </link>
+  <link name="l_thigh">
+    <visual><geometry><mesh filename="meshes/l_thigh.alu.stl" scale="0.001 0.001 0.001"/></geometry><material name="alu"/></visual>
+    <visual><geometry><mesh filename="meshes/l_thigh.shell.stl" scale="0.001 0.001 0.001"/></geometry><material name="shell"/></visual>
+    <visual><geometry><mesh filename="meshes/l_thigh.servo.stl" scale="0.001 0.001 0.001"/></geometry><material name="servo"/></visual>
+    <visual><geometry><mesh filename="meshes/l_thigh.accent.stl" scale="0.001 0.001 0.001"/></geometry><material name="accent"/></visual>
+  </link>
+  <link name="l_shin">
+    <visual><geometry><mesh filename="meshes/l_shin.alu.stl" scale="0.001 0.001 0.001"/></geometry><material name="alu"/></visual>
+    <visual><geometry><mesh filename="meshes/l_shin.shell.stl" scale="0.001 0.001 0.001"/></geometry><material name="shell"/></visual>
+    <visual><geometry><mesh filename="meshes/l_shin.accent.stl" scale="0.001 0.001 0.001"/></geometry><material name="accent"/></visual>
+    <visual><geometry><mesh filename="meshes/l_shin.servo.stl" scale="0.001 0.001 0.001"/></geometry><material name="servo"/></visual>
+  </link>
+  <link name="l_ankle">
+    <visual><geometry><mesh filename="meshes/l_ankle.alu.stl" scale="0.001 0.001 0.001"/></geometry><material name="alu"/></visual>
+    <visual><geometry><mesh filename="meshes/l_ankle.servo.stl" scale="0.001 0.001 0.001"/></geometry><material name="servo"/></visual>
+    <visual><geometry><mesh filename="meshes/l_ankle.accent.stl" scale="0.001 0.001 0.001"/></geometry><material name="accent"/></visual>
+  </link>
+  <link name="l_foot">
+    <visual><geometry><mesh filename="meshes/l_foot.alu.stl" scale="0.001 0.001 0.001"/></geometry><material name="alu"/></visual>
+    <visual><geometry><mesh filename="meshes/l_foot.rubber.stl" scale="0.001 0.001 0.001"/></geometry><material name="rubber"/></visual>
+    <visual><geometry><mesh filename="meshes/l_foot.accent.stl" scale="0.001 0.001 0.001"/></geometry><material name="accent"/></visual>
+    <collision><origin xyz="0.009 0 -0.0215"/><geometry><box size="0.096 0.058 0.004"/></geometry></collision>
+  </link>
+  <!-- ICS bus 0 slot 0: sudut = src / 1718.9 rad -->
+  <joint name="WAIST" type="revolute"><parent link="pelvis"/><child link="chest"/><origin xyz="0.0000 0.0000 0.0040"/><axis xyz="0 0 1"/><limit lower="-2.3" upper="2.3" effort="2.5" velocity="6.0"/></joint>
+  <joint name="phone_fixed" type="fixed"><parent link="chest"/><child link="phone"/><origin xyz="-0.0620 0.0000 0.0520"/></joint>
+  <!-- ICS bus 1 slot 0: sudut = src / 1718.9 rad -->
+  <joint name="HEAD" type="revolute"><parent link="chest"/><child link="head"/><origin xyz="0.0000 0.0000 0.1040"/><axis xyz="0 0 1"/><limit lower="-2.3" upper="2.3" effort="2.5" velocity="6.0"/></joint>
+  <!-- ICS bus 0 slot 1: sudut = src / 1718.9 rad -->
+  <joint name="R_SHOULDER_P" type="revolute"><parent link="chest"/><child link="r_shoulder"/><origin xyz="0.0000 -0.0540 0.0820"/><axis xyz="0 -1 0"/><limit lower="-2.3" upper="2.3" effort="2.5" velocity="6.0"/></joint>
+  <!-- ICS bus 0 slot 2: sudut = src / 1718.9 rad -->
+  <joint name="R_SHOULDER_R" type="revolute"><parent link="r_shoulder"/><child link="r_upperarm"/><origin xyz="0.0000 -0.0220 0.0000"/><axis xyz="0 0 -1"/><limit lower="-2.3" upper="2.3" effort="2.5" velocity="6.0"/></joint>
+  <!-- ICS bus 0 slot 3: sudut = src / 1718.9 rad -->
+  <joint name="R_SHOULDER_Y" type="revolute"><parent link="r_upperarm"/><child link="r_upperarm2"/><origin xyz="0.0140 0.0000 0.0000"/><axis xyz="1 0 0"/><limit lower="-2.3" upper="2.3" effort="2.5" velocity="6.0"/></joint>
+  <!-- ICS bus 0 slot 4: sudut = src / 1718.9 rad -->
+  <joint name="R_ELBOW" type="revolute"><parent link="r_upperarm2"/><child link="r_forearm"/><origin xyz="0.0480 0.0000 0.0000"/><axis xyz="0 1 0"/><limit lower="-2.3" upper="2.3" effort="2.5" velocity="6.0"/></joint>
+  <!-- ICS bus 1 slot 1: sudut = src / 1718.9 rad -->
+  <joint name="L_SHOULDER_P" type="revolute"><parent link="chest"/><child link="l_shoulder"/><origin xyz="0.0000 0.0540 0.0820"/><axis xyz="0 -1 0"/><limit lower="-2.3" upper="2.3" effort="2.5" velocity="6.0"/></joint>
+  <!-- ICS bus 1 slot 2: sudut = src / 1718.9 rad -->
+  <joint name="L_SHOULDER_R" type="revolute"><parent link="l_shoulder"/><child link="l_upperarm"/><origin xyz="0.0000 0.0220 0.0000"/><axis xyz="0 0 1"/><limit lower="-2.3" upper="2.3" effort="2.5" velocity="6.0"/></joint>
+  <!-- ICS bus 1 slot 3: sudut = src / 1718.9 rad -->
+  <joint name="L_SHOULDER_Y" type="revolute"><parent link="l_upperarm"/><child link="l_upperarm2"/><origin xyz="0.0140 0.0000 0.0000"/><axis xyz="-1 0 0"/><limit lower="-2.3" upper="2.3" effort="2.5" velocity="6.0"/></joint>
+  <!-- ICS bus 1 slot 4: sudut = src / 1718.9 rad -->
+  <joint name="L_ELBOW" type="revolute"><parent link="l_upperarm2"/><child link="l_forearm"/><origin xyz="0.0480 0.0000 0.0000"/><axis xyz="0 1 0"/><limit lower="-2.3" upper="2.3" effort="2.5" velocity="6.0"/></joint>
+  <!-- ICS bus 0 slot 5: sudut = src / 1718.9 rad -->
+  <joint name="R_HIP_Y" type="revolute"><parent link="pelvis"/><child link="r_hip_yaw"/><origin xyz="0.0000 -0.0320 -0.0280"/><axis xyz="0 0 1"/><limit lower="-2.3" upper="2.3" effort="2.5" velocity="6.0"/></joint>
+  <!-- ICS bus 0 slot 6: sudut = src / 1718.9 rad -->
+  <joint name="R_HIP_R" type="revolute"><parent link="r_hip_yaw"/><child link="r_hip_roll"/><origin xyz="0.0000 0.0000 -0.0300"/><axis xyz="1 0 0"/><limit lower="-2.3" upper="2.3" effort="2.5" velocity="6.0"/></joint>
+  <!-- ICS bus 0 slot 7: sudut = src / 1718.9 rad -->
+  <joint name="R_HIP_P" type="revolute"><parent link="r_hip_roll"/><child link="r_thigh"/><origin xyz="0.0000 0.0000 -0.0320"/><axis xyz="0 -1 0"/><limit lower="-2.3" upper="2.3" effort="2.5" velocity="6.0"/></joint>
+  <!-- ICS bus 0 slot 8: sudut = src / 1718.9 rad -->
+  <joint name="R_KNEE" type="revolute"><parent link="r_thigh"/><child link="r_shin"/><origin xyz="0.0000 0.0000 -0.0650"/><axis xyz="0 1 0"/><limit lower="-2.3" upper="2.3" effort="2.5" velocity="6.0"/></joint>
+  <!-- ICS bus 0 slot 9: sudut = src / 1718.9 rad -->
+  <joint name="R_ANKLE_P" type="revolute"><parent link="r_shin"/><child link="r_ankle"/><origin xyz="0.0000 0.0000 -0.0650"/><axis xyz="0 -1 0"/><limit lower="-2.3" upper="2.3" effort="2.5" velocity="6.0"/></joint>
+  <!-- ICS bus 0 slot 10: sudut = src / 1718.9 rad -->
+  <joint name="R_ANKLE_R" type="revolute"><parent link="r_ankle"/><child link="r_foot"/><origin xyz="0.0000 0.0000 -0.0325"/><axis xyz="1 0 0"/><limit lower="-2.3" upper="2.3" effort="2.5" velocity="6.0"/></joint>
+  <!-- ICS bus 1 slot 5: sudut = src / 1718.9 rad -->
+  <joint name="L_HIP_Y" type="revolute"><parent link="pelvis"/><child link="l_hip_yaw"/><origin xyz="0.0000 0.0320 -0.0280"/><axis xyz="0 0 1"/><limit lower="-2.3" upper="2.3" effort="2.5" velocity="6.0"/></joint>
+  <!-- ICS bus 1 slot 6: sudut = src / 1718.9 rad -->
+  <joint name="L_HIP_R" type="revolute"><parent link="l_hip_yaw"/><child link="l_hip_roll"/><origin xyz="0.0000 0.0000 -0.0300"/><axis xyz="1 0 0"/><limit lower="-2.3" upper="2.3" effort="2.5" velocity="6.0"/></joint>
+  <!-- ICS bus 1 slot 7: sudut = src / 1718.9 rad -->
+  <joint name="L_HIP_P" type="revolute"><parent link="l_hip_roll"/><child link="l_thigh"/><origin xyz="0.0000 0.0000 -0.0320"/><axis xyz="0 -1 0"/><limit lower="-2.3" upper="2.3" effort="2.5" velocity="6.0"/></joint>
+  <!-- ICS bus 1 slot 8: sudut = src / 1718.9 rad -->
+  <joint name="L_KNEE" type="revolute"><parent link="l_thigh"/><child link="l_shin"/><origin xyz="0.0000 0.0000 -0.0650"/><axis xyz="0 1 0"/><limit lower="-2.3" upper="2.3" effort="2.5" velocity="6.0"/></joint>
+  <!-- ICS bus 1 slot 9: sudut = src / 1718.9 rad -->
+  <joint name="L_ANKLE_P" type="revolute"><parent link="l_shin"/><child link="l_ankle"/><origin xyz="0.0000 0.0000 -0.0650"/><axis xyz="0 -1 0"/><limit lower="-2.3" upper="2.3" effort="2.5" velocity="6.0"/></joint>
+  <!-- ICS bus 1 slot 10: sudut = src / 1718.9 rad -->
+  <joint name="L_ANKLE_R" type="revolute"><parent link="l_ankle"/><child link="l_foot"/><origin xyz="0.0000 0.0000 -0.0325"/><axis xyz="1 0 0"/><limit lower="-2.3" upper="2.3" effort="2.5" velocity="6.0"/></joint>
+</robot>

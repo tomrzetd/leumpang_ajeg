@@ -30,6 +30,7 @@ const char* modeName(Mode m) {
         case Mode::MIRROR_DBG: return "MIRROR_DBG";
         case Mode::WALK_CONT:  return "WALK_CONT";
         case Mode::MOTION_PLAY:return "MOTION_PLAY";
+        case Mode::LIVE_POSE:  return "LIVE_POSE";
     }
     return "UNKNOWN";
 }
@@ -49,6 +50,7 @@ const char* modeShortName(Mode m) {
         case Mode::MIRROR_DBG: return "MIRROR";
         case Mode::WALK_CONT:  return "WALK CONT";
         case Mode::MOTION_PLAY:return "MOTION";
+        case Mode::LIVE_POSE:  return "LIVE POSE";
     }
     return "UNKNOWN";
 }
@@ -334,7 +336,7 @@ void Controller::imuCalRestart() { cal_.done = false; offRoll_ = offPitch_ = 0; 
 static bool isWalkingMode(Mode m) { return m == Mode::BALANCE || modeIsGait(m); }
 static bool fallCheckMode(Mode m) {
     return isWalkingMode(m) || m == Mode::READY || m == Mode::POSE_HOLD || m == Mode::MIRROR_DBG ||
-           m == Mode::MOTION_PLAY;
+           m == Mode::MOTION_PLAY || m == Mode::LIVE_POSE;
 }
 
 void Controller::enterFallen(const char* why) {
@@ -617,6 +619,7 @@ void Controller::walkControl() {
             break;
         case Mode::WALK_CONT:   walkContStep(); break;
         case Mode::MOTION_PLAY: motionStep();   break;
+        case Mode::LIVE_POSE:   livePoseStep(); break;
         case Mode::FALLEN:
             if (opt_.autoRearm) {
                 if (imuFresh() && fabsf(roll_) < cfg_.rearmAngleRad && fabsf(pitch_) < cfg_.rearmAngleRad) {
@@ -768,6 +771,7 @@ void Controller::handleCommand(const Command& c) {
         case CmdType::SET_TRIM:  setTrim(c.bus, c.slot, (int32_t)lroundf(clampf(c.value, -30000.0f, 30000.0f))); break;
         case CmdType::GAIT_INTENT: gaitIntent(c); break;
         case CmdType::MOTION_PLAY: motionStart(c.slot); break;
+        case CmdType::POSE_TARGET: poseTarget(c); break;
         case CmdType::MOTION_STOP:
             if (walk_.mode == Mode::MOTION_PLAY) motionEnd(false, "dihentikan");
             break;
@@ -950,6 +954,50 @@ void Controller::motionEnd(bool returnHome, const char* why) {
     mot_ = nullptr; motSlot_ = -1; motFrame_ = 0;
     walk_.mode = Mode::READY;
     if (returnHome) startReset("motion selesai -> HOME");
+}
+
+// ============================================================================
+//  Fase 2: pose langsung (studio, kamera). Hanya dari READY; robot tetap otoritas:
+//  batas sendi dicek per pesan, kecepatan dibatasi slew output (servoMaxStep),
+//  deteksi jatuh aktif, ttl habis -> ramp kembali ke HOME.
+// ============================================================================
+void Controller::poseTarget(const Command& c) {
+    const Mode m = walk_.mode;
+    if (m != Mode::READY && m != Mode::LIVE_POSE) {
+        if (now() / 1000 - lastPoseRejectMs_ > 2000) { lastPoseRejectMs_ = now() / 1000; logf("POSE_TARGET ditolak: hanya dari READY\r\n"); }
+        return;
+    }
+    if (c.ttlMs == 0) {                                   // host minta selesai
+        if (m == Mode::LIVE_POSE) { walk_.mode = Mode::READY; startReset("live pose selesai -> HOME"); }
+        return;
+    }
+    const uint32_t mask = c.poseMask & ((1u << (2 * SERVO_SLOTS)) - 1u);
+    for (uint8_t b = 0; b < 2; ++b) for (uint8_t s = 0; s < SERVO_SLOTS; ++s) {
+        if (!(mask & (1u << (b * SERVO_SLOTS + s)))) continue;
+        const JointDef& j = JOINTS[b][s];
+        const int32_t raw = (int32_t)j.center + (int32_t)j.sign * ((int32_t)c.pose[b][s] + trim_[b][s]);
+        if (raw < j.lo || raw > j.hi) {
+            logf("POSE_TARGET ditolak: %s di luar batas (%ld)\r\n", JOINT_NAMES[b][s], (long)raw);
+            return;
+        }
+    }
+    if (m == Mode::READY) {
+        for (uint8_t b = 0; b < 2; ++b) for (uint8_t s = 0; s < SERVO_SLOTS; ++s) poseTgt_[b][s] = *jointSrc(b, s);
+        walk_.mode = Mode::LIVE_POSE;
+        logf("mode=820 [Live pose] mask=0x%06lx\r\n", (unsigned long)mask);
+    }
+    for (uint8_t b = 0; b < 2; ++b) for (uint8_t s = 0; s < SERVO_SLOTS; ++s)
+        if (mask & (1u << (b * SERVO_SLOTS + s))) poseTgt_[b][s] = c.pose[b][s];
+    poseDeadlineUs_ = now() + (int64_t)(c.ttlMs > 1000 ? 1000 : c.ttlMs) * 1000;
+}
+
+void Controller::livePoseStep() {
+    if (now() >= poseDeadlineUs_) {
+        walk_.mode = Mode::READY;
+        startReset("live pose: ttl habis -> HOME");
+        return;
+    }
+    for (uint8_t b = 0; b < 2; ++b) for (uint8_t s = 0; s < SERVO_SLOTS; ++s) *jointSrc(b, s) = poseTgt_[b][s];
 }
 
 void Controller::blackboxPush(uint32_t loopUs) {

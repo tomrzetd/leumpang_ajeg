@@ -40,7 +40,7 @@ MotionError motionDecode(const uint8_t* d, size_t n, Motion& m) {
         MotionFrame& f = m.f[i];
         f.durMs = rd16(p);
         f.interp = p[2];
-        if (f.durMs < 20 || f.durMs > 10000) return MotionError::DURATION;
+        if (f.durMs < MOTION_MIN_FRAME_MS || f.durMs > MOTION_MAX_FRAME_MS) return MotionError::DURATION;
         if (f.interp > MI_STEP) return MotionError::INTERP;
         for (int b = 0; b < SERVO_BUSES; ++b) for (int s = 0; s < SERVO_SLOTS; ++s)
             f.joint[b][s] = (int16_t)rd16(p + 4 + 2 * (b * SERVO_SLOTS + s));

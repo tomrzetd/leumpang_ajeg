@@ -20,6 +20,8 @@ constexpr uint32_t MOTION_MAGIC      = 0x314D414C;      // "LAM1"
 constexpr size_t   MOTION_HDR_BYTES  = 24;
 constexpr size_t   MOTION_FRAME_BYTES = 48;
 constexpr size_t   MOTION_MAX_BYTES  = MOTION_HDR_BYTES + MOTION_MAX_FRAMES * MOTION_FRAME_BYTES + 2;
+constexpr uint16_t MOTION_MIN_FRAME_MS = 20;
+constexpr uint16_t MOTION_MAX_FRAME_MS = 10000;
 
 enum MotionFlags : uint16_t { MF_RETURN_HOME = 1u << 0 };   // selesai -> RESET ke HOME
 enum MotionInterp : uint8_t { MI_COSINE = 0, MI_LINEAR = 1, MI_STEP = 2 };

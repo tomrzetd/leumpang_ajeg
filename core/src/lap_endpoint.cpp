@@ -1,6 +1,7 @@
 #include "leumpang/lap_endpoint.h"
 
 #include <stdio.h>
+#include <string.h>
 
 namespace la {
 namespace lap {
@@ -173,6 +174,14 @@ void LapEndpoint::handle(const Packet& p, uint32_t nowMs) {
             if (!h_.motions) { ack(p, UNSUPPORTED); return; }
             if (!parsePacket(p, m) || !MotionStore::validSlot(m.slot)) { ack(p, BAD_VALUE); return; }
             Command c{}; c.type = m.play ? CmdType::MOTION_PLAY : CmdType::MOTION_STOP; c.slot = m.slot;
+            submit(c);
+            return;
+        }
+        case POSE_TARGET: {
+            PoseTargetMsg m;
+            if (!parsePacket(p, m)) { ack(p, BAD_LEN); return; }
+            Command c{}; c.type = CmdType::POSE_TARGET; c.ttlMs = m.ttlMs; c.poseMask = m.mask;
+            memcpy(c.pose, m.joint, sizeof(c.pose));
             submit(c);
             return;
         }

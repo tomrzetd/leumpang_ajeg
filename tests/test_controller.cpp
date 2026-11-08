@@ -201,5 +201,31 @@ int main() {
     g_pitch = 0.5f; step(6);
     CHECK(T().mode == Mode::FALLEN && !T().intentActive, "jatuh saat WALK_CONT -> FALLEN, niat dibatalkan");
     g_pitch = 0;
+
+    // ================= Fase 2: live pose (820) =================
+    step(20); box.k.push_back('r'); step(1); step(110);
+    CHECK(T().mode == Mode::READY, "kembali READY sebelum uji live pose");
+    Command lp{}; lp.type = CmdType::POSE_TARGET; lp.ttlMs = 300;
+    lp.poseMask = 1u << 4;                              // hanya siku kanan
+    lp.pose[0][4] = -900; lp.pose[1][4] = 1234;         // L diabaikan (tidak di mask)
+    box.c.push_back(lp); step(1);
+    CHECK(T().mode == Mode::LIVE_POSE, "POSE_TARGET dari READY -> LIVE_POSE");
+    for (int i = 0; i < 40; ++i) { if (i % 10 == 0) box.c.push_back(lp); step(1); }   // host kirim ulang < ttl
+    CHECK(T().kin.E[0] == -900 && T().kin.E[1] == 0 && T().kin.U0[0] == -2700, "hanya sendi di mask yang bergerak");
+    const int16_t c0 = T().cmd[0][4]; step(1);
+    CHECK(T().cmd[0][4] == c0, "output sampai target (slew servoMaxStep)");
+    Command bad = lp; bad.pose[0][4] = -3000; box.c.push_back(bad); step(2);
+    CHECK(T().kin.E[0] == -900, "target di luar batas sendi ditolak, pose lama dipertahankan");
+    step(35);
+    CHECK(T().mode == Mode::RESET || T().mode == Mode::READY, "ttl habis -> ramp HOME");
+    step(110);
+    CHECK(T().mode == Mode::READY && T().kin.E[0] == 0, "kembali HOME/READY setelah live pose");
+    box.k.push_back('g'); step(2);
+    box.c.push_back(lp); step(2);
+    CHECK(T().mode == Mode::BALANCE, "POSE_TARGET ditolak saat BALANCE");
+    box.k.push_back('r'); step(110);
+    box.c.push_back(lp); step(2);
+    Command fin0 = lp; fin0.ttlMs = 0; box.c.push_back(fin0); step(1);
+    CHECK(T().mode == Mode::RESET, "POSE_TARGET ttl=0 -> selesai, ramp HOME");
     return checkSummary("test_controller");
 }

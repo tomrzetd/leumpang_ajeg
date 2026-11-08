@@ -20,6 +20,7 @@ TELEMETRY, SERVO_STATE, GAIT_STATE, CONFIG, LOG = 0x10, 0x11, 0x12, 0x13, 0x14
 CMD, SET_PARAM, SET_TRIM, STREAM_CFG = 0x20, 0x21, 0x22, 0x23
 GAIT_INTENT, PERCEPTION = 0x30, 0x31
 MOTION_BEGIN, MOTION_CHUNK, MOTION_END, MOTION_PLAY, MOTION_STATUS = 0x40, 0x41, 0x42, 0x43, 0x44
+POSE_TARGET = 0x45
 SIM_IMU, SIM_FAULT = 0x70, 0x71
 
 TYPE_NAMES = {v: k for k, v in dict(globals()).items() if k.isupper() and isinstance(v, int) and 0 < v < 0x80
@@ -41,7 +42,7 @@ TF_IMU_FRESH, TF_IMU_INIT, TF_CAL_DONE, TF_PERSIST_PENDING, TF_JIKU_LEFT, TF_INT
 
 MODES = {700: "RAW_ANGLES", 705: "FALLEN", 710: "RESET", 720: "READY", 730: "BALANCE", 740: "WALK_INIT",
          750: "WALK_HOLD", 760: "WALK_STEP", 770: "WALK_END", 780: "POSE_HOLD", 790: "ANGLE_DISP",
-         791: "MIRROR_DBG", 800: "WALK_CONT", 810: "MOTION_PLAY"}
+         791: "MIRROR_DBG", 800: "WALK_CONT", 810: "MOTION_PLAY", 820: "LIVE_POSE"}
 
 JOINT_NAMES = [
     ["WAIST", "R SHOULDER P", "R SHOULDER R", "R SHOULDER Y", "R ELBOW", "R HIP Y", "R HIP R",
@@ -293,6 +294,11 @@ def pk_set_trim(bus: int, slot: int, value: int) -> bytes:
 
 def pk_stream_cfg(tele_hz=20, servo_hz=5, gait_hz=0, log_on=1) -> bytes:
     return struct.pack("<BBBB", tele_hz, servo_hz, gait_hz, log_on)
+
+
+def pk_pose_target(joints, mask: int, ttl_ms: int) -> bytes:
+    """joints[bus][slot] offset src (ruang 'kin'); mask bit bus*11+slot; ttl 0 = selesai (ramp HOME)."""
+    return struct.pack("<IH", mask, ttl_ms) + struct.pack("<22h", *[int(v) for b in joints for v in b])
 
 
 def pk_gait_intent(vx: float, vy: float, yaw_deg: float, ttl_ms: int) -> bytes:

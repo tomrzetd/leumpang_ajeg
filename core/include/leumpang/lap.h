@@ -43,6 +43,7 @@ enum MsgType : uint8_t {
     MOTION_END   = 0x42,
     MOTION_PLAY  = 0x43,
     MOTION_STATUS= 0x44,   // robot -> host: isi 4 slot
+    POSE_TARGET  = 0x45,   // host -> robot (Fase 2): pose langsung, mode 820
     SIM_IMU      = 0x70,   // hanya simulator
     SIM_FAULT    = 0x71,
 };
@@ -54,7 +55,7 @@ enum CmdId : uint8_t { CMD_RESET = 0, CMD_GO = 1, CMD_STOP = 2, CMD_CAL = 3, CMD
                       CMD_MOTION_LIST = 6 };
 enum Caps  : uint32_t {
     CAP_WIFI = 1u << 0, CAP_SD = 1u << 1, CAP_GAIT_INTENT = 1u << 2, CAP_MOTION = 1u << 3,
-    CAP_SIM = 1u << 4, CAP_LCD = 1u << 5, CAP_USB_CDC = 1u << 6,
+    CAP_SIM = 1u << 4, CAP_LCD = 1u << 5, CAP_USB_CDC = 1u << 6, CAP_LIVE_POSE = 1u << 7,
 };
 // Flag TELEMETRY
 enum TeleFlags : uint16_t {
@@ -227,6 +228,10 @@ struct MotionPlayMsg  { uint8_t slot = 0, play = 1;
 struct MotionStatusMsg { uint8_t state[4]{}, nFrames[4]{}; char name[4][17]{};
     void enc(Writer& w) const { for (int i = 0; i < 4; ++i) { w.u8(state[i]); w.u8(nFrames[i]); w.fixstr(name[i], 16); } }
     bool dec(Reader& r) { for (int i = 0; i < 4; ++i) { state[i] = r.u8(); nFrames[i] = r.u8(); r.fixstr(name[i], 16); } return r.ok(); } };
+struct PoseTargetMsg {                    // 4 + 2 + 44 = 50 B
+    uint32_t mask = 0; uint16_t ttlMs = 0; int16_t joint[2][SERVO_SLOTS]{};
+    void enc(Writer& w) const { w.u32(mask); w.u16(ttlMs); for (auto& b : joint) for (int16_t v : b) w.i16(v); }
+    bool dec(Reader& r) { mask = r.u32(); ttlMs = r.u16(); for (auto& b : joint) for (int16_t& v : b) v = r.i16(); return r.ok(); } };
 struct SimImuMsg    { float rollDeg = 0, pitchDeg = 0; uint8_t sensorOk = 1;
     void enc(Writer& w) const { w.f32(rollDeg); w.f32(pitchDeg); w.u8(sensorOk); }
     bool dec(Reader& r) { rollDeg = r.f32(); pitchDeg = r.f32(); sensorOk = r.u8(); return r.ok(); } };

@@ -206,7 +206,7 @@ int main(int argc, char** argv) {
     la::lap::Hello self;
     self.role = la::lap::ROLE_SIM; self.board = la::lap::BOARD_SIM;
     self.fwMajor = la::CORE_VER_MAJOR; self.fwMinor = la::CORE_VER_MINOR; self.fwPatch = la::CORE_VER_PATCH;
-    self.caps = la::lap::CAP_SIM | la::lap::CAP_MOTION | la::lap::CAP_GAIT_INTENT | (g_bbFile ? (uint32_t)la::lap::CAP_SD : 0u);
+    self.caps = la::lap::CAP_SIM | la::lap::CAP_MOTION | la::lap::CAP_GAIT_INTENT | la::lap::CAP_LIVE_POSE | (g_bbFile ? (uint32_t)la::lap::CAP_SD : 0u);
     strncpy(self.name, "leumpang-sim", 16);
     la::lap::LapEndpoint::Host h;
     h.write = epWrite; h.submit = epSubmit; h.snapshot = epSnapshot; h.simHook = epSim;

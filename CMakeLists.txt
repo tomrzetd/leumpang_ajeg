@@ -30,6 +30,12 @@ target_include_directories(leumpang_core PUBLIC core/include)
 target_compile_options(leumpang_core PRIVATE ${LA_WARN} ${LA_SAN})
 target_link_options(leumpang_core PUBLIC ${LA_SAN})
 
+# ---- pustaka studio tanpa Qt (FK twin, retarget, dokumen gerak) ----------
+add_library(leumpang_studio_lib STATIC studio/lib/kinematics.cpp studio/lib/retarget.cpp studio/lib/motion_doc.cpp)
+target_include_directories(leumpang_studio_lib PUBLIC studio/lib)
+target_link_libraries(leumpang_studio_lib PUBLIC leumpang_core)
+target_compile_options(leumpang_studio_lib PRIVATE ${LA_WARN} ${LA_SAN})
+
 # ---- simulator ------------------------------------------------------------
 if(UNIX)
   add_executable(leumpang_sim sim/leumpang_sim.cpp)
@@ -46,6 +52,12 @@ foreach(t test_lap test_controller test_imu)
   target_compile_options(${t} PRIVATE ${LA_WARN} ${LA_SAN})
   add_test(NAME ${t} COMMAND ${t})
 endforeach()
+
+add_executable(test_studio tests/test_studio.cpp)
+target_include_directories(test_studio PRIVATE tests)
+target_link_libraries(test_studio PRIVATE leumpang_studio_lib)
+target_compile_options(test_studio PRIVATE ${LA_WARN} ${LA_SAN})
+add_test(NAME test_studio COMMAND test_studio)
 
 # Paritas: firmware V4 lama (tests/legacy) vs core, input identik per siklus
 add_executable(test_parity tests/test_parity.cpp tests/legacy/control_legacy.cpp)

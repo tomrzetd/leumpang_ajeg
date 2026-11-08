@@ -9,7 +9,7 @@
 namespace la {
 
 // ---- Versi ----------------------------------------------------------------
-constexpr uint8_t CORE_VER_MAJOR = 0, CORE_VER_MINOR = 6, CORE_VER_PATCH = 0;
+constexpr uint8_t CORE_VER_MAJOR = 0, CORE_VER_MINOR = 7, CORE_VER_PATCH = 0;
 
 // ---- Servo ICS 3.5 ----------------------------------------------------------
 constexpr uint32_t ICS_BAUD     = 1250000;   // 8E1
@@ -59,7 +59,8 @@ enum class Mode : uint16_t {
     WALK_INIT = 740, WALK_HOLD = 750, WALK_STEP = 760, WALK_END = 770,
     POSE_HOLD = 780, ANGLE_DISP = 790, MIRROR_DBG = 791,
     WALK_CONT = 800,      // Fase 1: langkah berulang atas GAIT_INTENT (EKSPERIMENTAL)
-    MOTION_PLAY = 810     // Fase 1: memutar template gerak
+    MOTION_PLAY = 810,    // Fase 1: memutar template gerak
+    LIVE_POSE = 820       // Fase 2: pose langsung dari studio/kamera (POSE_TARGET + ttl)
 };
 const char* modeName(Mode m);
 const char* modeShortName(Mode m);
@@ -96,7 +97,7 @@ struct ServoPositions {
 
 // ---- Perintah -------------------------------------------------------------
 enum class CmdType : uint8_t { RESET, GO, STOP, CALIBRATE, SET_PARAM, SET_TRIM,
-                               GAIT_INTENT, MOTION_PLAY, MOTION_STOP };
+                               GAIT_INTENT, MOTION_PLAY, MOTION_STOP, POSE_TARGET };
 enum class ParamId : uint8_t {
     FALL_DEG, REARM_DEG, IMU_STALE_MS, SERVO_STEP, TRIGGER_ROLL_DEG,
     TRIGGER_PITCH_DEG, FOOT_LIFT, SWAY_BASE, SWAY_GAIN, SIGN_ROLL,
@@ -108,7 +109,9 @@ struct Command {
     uint8_t  bus, slot;     // SET_TRIM; slot juga = slot motion untuk MOTION_PLAY
     float    value;         // SET_PARAM / SET_TRIM / GAIT_INTENT vx (mm/langkah)
     float    vy, yawDeg;    // GAIT_INTENT (vy belum dipakai; yaw = derajat per langkah)
-    uint16_t ttlMs;         // GAIT_INTENT: niat kedaluwarsa setelah ttl
+    uint16_t ttlMs;         // GAIT_INTENT / POSE_TARGET: kedaluwarsa setelah ttl
+    uint32_t poseMask;      // POSE_TARGET: bit (bus*11+slot) = sendi dikendalikan
+    int16_t  pose[2][SERVO_SLOTS];   // POSE_TARGET: offset sendi (ruang src)
 };
 
 // ---- Masukan IMU per siklus (dari HAL) -------------------------------------
