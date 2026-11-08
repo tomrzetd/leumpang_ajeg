@@ -13,9 +13,13 @@ simulator, serta protokol bersama untuk HP Android ("mata") dan studio desktop (
 |---|---|
 | leumpang-core (UVC, IK, state machine, keselamatan) | ✅ terbukti identik dengan firmware V4 |
 | Protokol LAP v1 (C++ / Python) | ✅ |
-| Firmware ESP32-S3 (ESP-IDF) | ✅ kode; ⏳ uji hardware |
+| Firmware ESP32-S3 (ESP-IDF) | ✅ kode + CI; ⏳ uji hardware |
+| Firmware ESP32-P4 FireBeetle 2 (ESP-IDF, Wi-Fi via C6) | ✅ kode + CI; ⏳ uji hardware |
+| Firmware STM32H562 WeAct (bare-metal, USB CDC) | ✅ kode + CI; ⏳ uji hardware |
+| SD card: template gerak + blackbox | ✅ |
+| Gait kontinu `GAIT_INTENT` (mode 800, eksperimental) | ✅ simulasi |
+| Motion player LAM1 (mode 810) | ✅ simulasi |
 | Simulator host + `lapctl` | ✅ |
-| Firmware ESP32-P4, STM32H562, SD card, gait kontinu | Fase 1 |
 | Studio desktop + digital twin | Fase 2 |
 | Aplikasi Android "mata" | Fase 3 |
 
@@ -34,17 +38,33 @@ python3 tools/lapctl.py --tcp 127.0.0.1 sim-imu 0 40
 ```
 Di terminal simulator Anda juga bisa mengetik perintah konsol robot (`r g x c t y z ?`).
 
-## Firmware ESP32-S3
+## Clone
 
 ```bash
-. $IDF_PATH/export.sh                             # ESP-IDF >= 5.3
-cd firmware/esp
-idf.py set-target esp32s3
-idf.py build flash monitor
+git clone --recursive https://github.com/tomrzetd/leumpang_ajeg.git
+# sudah terlanjur clone tanpa --recursive:
+git submodule update --init --recursive
 ```
-SoftAP `LEUMPANG-AJEG-xxxx`, dashboard `http://192.168.4.1` / `http://leumpang-ajeg.local`,
-LAP TCP `192.168.4.1:5760`. Detail wiring, temuan review, dan prosedur uji pertama:
-[firmware/esp/README.md](firmware/esp/README.md).
+
+## Firmware
+
+| Board | Folder | Build | Link ke HP/PC |
+|---|---|---|---|
+| ESP32-S3 N16R8 | [firmware/esp](firmware/esp/README.md) | `idf.py set-target esp32s3 build` (IDF ≥ 5.3) | Wi-Fi `192.168.4.1:5760`, UART |
+| ESP32-P4 FireBeetle 2 | [firmware/esp](firmware/esp/README.md#5a-esp32-p4-firebeetle-2) | `idf.py set-target esp32p4 build` (IDF ≥ 5.5) | Wi-Fi (C6), USB-C |
+| STM32H562 WeAct | [firmware/stm32h562](firmware/stm32h562/README.md) | `cmake -B build -DCMAKE_TOOLCHAIN_FILE=cmake/arm-none-eabi.cmake` | USB-C (CDC) |
+
+Board ESP: SoftAP `LEUMPANG-AJEG-xxxx`, dashboard `http://192.168.4.1` / `http://leumpang-ajeg.local`.
+Semua board: `python3 tools/lapctl.py --serial /dev/ttyACM0 hello`.
+
+### Template gerak
+
+```bash
+python3 tools/lam.py build motions/lambai.json lambai.lam
+python3 tools/lapctl.py --tcp 192.168.4.1 motion-upload lambai.lam 0    # disimpan juga ke SD
+python3 tools/lapctl.py --tcp 192.168.4.1 motion-play 0                 # dari READY
+```
 
 ⚠️ Ganti `WIFI_AP_PASS` dan `DASH_PASS` di `firmware/esp/main/app_config.h`, dan persempit
 batas `lo/hi` tiap sendi di `core/src/controller.cpp` (`JOINTS`) sebelum uji lantai.
+Gait kontinu mati secara default (`param gaitEnable 1` untuk menyalakan); uji dulu di simulator.

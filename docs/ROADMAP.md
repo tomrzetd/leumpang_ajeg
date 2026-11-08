@@ -6,15 +6,23 @@
 * Firmware ESP32-S3 memakai core + server LAP TCP :5760
 * Simulator host, `lapctl`, ctest, CI (host Linux/macOS + build ESP-IDF asli)
 
-## Fase 1 — Firmware tiga board + SD + gait kontinu
-* **HAL ESP32-P4 (FireBeetle 2)**: ESP-IDF, berbagi ±80% kode S3; Wi-Fi via ESP32-C6 (esp_hosted); SD SDMMC 4-bit.
-* **HAL STM32H562 (WeAct)**: STM32CubeH5 + ThreadX/FreeRTOS; ICS via USART half-duplex satu kabel;
-  SDMMC1 (PC8–PC12, PD2), USB CDC (PA11/PA12); tanpa Wi-Fi (dashboard via USB/HP).
-* **USB CDC device** di ketiga board (link HP OTG) memakai `LapEndpoint` yang sama.
-* **SD card**: FATFS; pustaka gerakan, blackbox telemetry 100 Hz, backup config — ditulis dari task prioritas rendah.
-* **Mode gait kontinu** (baru): langkah berulang dengan input `vx, vy, yaw` dari `GAIT_INTENT`,
-  watchdog link, batas kecepatan; divalidasi di simulator/twin dulu.
-* **Motion player**: format template keyframe + interpolasi, validasi batas posisi/kecepatan, `MOTION_*`.
+## Fase 1 — Firmware tiga board + SD + gait kontinu ✅ (kode; ⏳ uji hardware)
+* **ESP32-P4 (FireBeetle 2)**: satu proyek ESP-IDF dengan S3 (`firmware/esp`, pin per board);
+  Wi-Fi via ESP32-C6 (esp_hosted 2.13.1, SDIO); konsol + LAP lewat USB-Serial-JTAG; SD slot on-board.
+* **STM32H562 (WeAct)**: bare-metal HAL (tanpa RTOS: TIM6 kontrol 100 Hz, TIM7 IMU 500 Hz);
+  ICS USART half-duplex + EN; USB CDC (TinyUSB); SDMMC1 + FatFs; config/trim di SD.
+* **Link serial bersama** di ketiga board (`SerialLink`): konsol teks dan LAP di port yang sama.
+* **SD card**: template gerak `/…/slotN.lam` dimuat saat boot; blackbox 100 Hz (`.lbb`, `bbx2csv.py`).
+* **Gait kontinu (mode 800, eksperimental, default mati)**: `GAIT_INTENT` vx (mm/langkah) dan yaw (°/langkah)
+  dengan ttl, perubahan dihaluskan per langkah, berhenti otomatis saat niat kedaluwarsa.
+* **Motion player (mode 810)**: format LAM1 (≤64 keyframe, cosine/linear/step), unggah lewat `MOTION_*`,
+  setiap frame dicek terhadap batas sendi sebelum diputar.
+* Driver ICM-20948 + Mahony dipindah ke core (dipakai ketiga board), CI membangun ketiga firmware.
+
+**Ditunda dari Fase 1:** LCD ST7789 & RGB WS2812 di STM32; langkah menyamping (`vy`); `PERCEPTION`.
+
+**Uji hardware yang dibutuhkan (urut):** pin & polaritas EN tiap board → `Boot sync 22/22` digantung →
+tanda IMU → BALANCE → motion `lambai` dari READY → baru `gaitEnable=1` di lantai dengan tali pengaman.
 
 ## Fase 2 — Studio desktop x86
 * Qt 6 (C++) + Qt Quick 3D: digital twin 3D, tuning per servo (trim, limit, center), editor gerakan + timeline.

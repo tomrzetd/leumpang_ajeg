@@ -15,7 +15,10 @@
                            │  ServoBus / ImuInput / Platform / Inbox
         ┌──────────────┬───┴──────────┬──────────────────┐
      HAL ESP32-S3   HAL ESP32-P4   HAL STM32H562     HAL simulasi
-     (selesai)      (Fase 1)       (Fase 1)          (selesai; MuJoCo Fase 2)
+     FreeRTOS       FreeRTOS       bare-metal ISR    host (MuJoCo Fase 2)
+     Wi-Fi + UART   Wi-Fi(C6)+USB  USB CDC
+        └──────────────┴──────┬───────┘
+                       SD card: motion LAM1, blackbox .lbb, (STM32) config
 ```
 
 ## Prinsip
@@ -32,16 +35,23 @@
 4. **Robot = otoritas akhir.** HP dan PC mengirim niat/perintah; controller tetap memeriksa state,
    batas sendi, slew, jatuh, dan watchdog link.
 5. **Tidak ada flash/SD write di jalur realtime.** Persistensi ditunda sampai `modePersistSafe()`.
+   Blackbox keluar dari thread kontrol lewat ring SPSC tanpa lock (`blackbox.h`); slot motion
+   berpindah antar-thread lewat state atomik (`MotionStore`: EMPTY→WRITING→READY→PLAYING).
+6. **Driver bersama bila bisa.** ICM-20948 + Mahony (`icm20948.h`) dan multiplexer konsol/LAP
+   (`lap_serial.h`) ada di core; HAL hanya memberi fungsi baca/tulis I2C atau byte serial.
 
 ## Struktur repo
 
 | Folder | Isi |
 |---|---|
-| `core/` | leumpang-core: `types.h`, `ics.h`, `controller.*`, `lap.*`, `lap_endpoint.*` |
+| `core/` | leumpang-core: `types.h`, `ics.h`, `controller.*`, `lap.*`, `lap_endpoint.*`, `lap_serial.*`, `motion.*`, `blackbox.h`, `icm20948.*` |
 | `firmware/components/leumpang_core` | pembungkus komponen ESP-IDF untuk `core/` |
 | `firmware/esp/` | firmware ESP-IDF untuk ESP32-S3 & ESP32-P4 (HAL: UART ICS, IMU, LCD, Wi-Fi, web, LAP TCP + serial, SD) |
+| `firmware/stm32h562/` | firmware bare-metal STM32H562 (HAL ST, TinyUSB CDC, FatFs) |
+| `firmware/third_party/esp_hosted` | submodule esp_hosted v2.13.1 (Wi-Fi P4 via C6) |
 | `sim/` | `leumpang_sim`: core + model servo + IMU sintetis + server LAP TCP |
-| `tools/` | `lap.py` (protokol Python), `lapctl.py` (CLI) |
+| `tools/` | `lap.py` (protokol Python), `lapctl.py` (CLI), `lam.py` (JSON→LAM1), `bbx2csv.py` |
+| `motions/` | contoh template gerak (`lambai.json`) |
 | `tests/` | unit, fuzz, skenario, **paritas V4↔core**, lintas-bahasa, stub IDF |
 | `docs/` | arsitektur, protokol, roadmap |
 
@@ -53,5 +63,7 @@
 | `test_controller` | boot sync, servo mati, READY→kalibrasi→BALANCE→langkah, jatuh→re-arm, IMU basi, parser ICS (termasuk jebakan echo V3) |
 | `test_lap` | CRC/COBS vektor standar, 5000 roundtrip acak, resync setelah sampah, fuzz 2 juta byte, perilaku endpoint |
 | `test_lap_python` | klien Python ↔ simulator C++ lewat TCP: handshake, stream, param, trim, jatuh, re-arm, robustness |
-| `fw_s3_linkcheck` (build) | seluruh firmware ESP32-S3 + core ter-compile & ter-link terhadap stub API IDF |
-| CI `firmware-esp32s3` | build ESP-IDF **asli** v5.3 & v5.4 |
+| `test_imu` | driver ICM-20948 (register sintetis) + konvergensi Mahony, bias gyro, penolakan impak |
+| `fw_s3_linkcheck`, `fw_p4_linkcheck` (build) | seluruh firmware ESP + core ter-compile & ter-link terhadap stub API IDF |
+| CI `firmware-esp` | build ESP-IDF **asli**: S3 v5.3.2 & v5.4.1, P4 v5.5.1 |
+| CI `firmware-stm32` | build arm-none-eabi-gcc 13.3 → `.elf/.bin/.hex` |

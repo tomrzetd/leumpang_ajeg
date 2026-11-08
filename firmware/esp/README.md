@@ -1,7 +1,8 @@
-# Leumpang Ajeg — firmware ESP32-S3 N16R8 (ESP-IDF)
+# Leumpang Ajeg — firmware ESP32-S3 N16R8 & ESP32-P4 FireBeetle 2 (ESP-IDF)
 
 > Sejak Fase 0, logika robot ada di `core/` (leumpang-core). Folder ini berisi HAL board:
-> UART ICS, IMU ICM-20948, LCD, RGB, Wi-Fi/web, LAP TCP :5760, NVS.
+> UART ICS, IMU ICM-20948, LCD, RGB, Wi-Fi/web, LAP TCP :5760, konsol/LAP serial, SD card, NVS.
+> Satu proyek untuk dua chip; target dipilih dengan `idf.py set-target`, pin di `main/board_<target>.h`.
 
 Port dari `biped_esp32s3_n16r8_dashboard_v3.cpp` (Arduino) ke **ESP-IDF ≥ 5.3**.
 Rumus gait UVC, IK, state machine, nilai mode (700…791), center sendi, dan pemetaan bus **tidak diubah**.
@@ -66,13 +67,63 @@ batas `lo/hi` tiap sendi (`JOINTS` di `core/src/controller.cpp`) masih rentang p
 ## 5. Build & flash
 
 ```bash
-. $IDF_PATH/export.sh            # ESP-IDF v5.3 / v5.4 / v5.5
-cd firmware/esp32s3
-idf.py set-target esp32s3
+git submodule update --init --recursive     # sekali, setelah clone (esp_hosted untuk P4)
+. $IDF_PATH/export.sh
+cd firmware/esp
+
+idf.py set-target esp32s3                   # ESP-IDF v5.3 / v5.4 / v5.5
+# atau
+idf.py set-target esp32p4                   # ESP-IDF >= v5.5
+
 idf.py build flash monitor
 ```
 Ganti `WIFI_AP_PASS` dan `DASH_PASS` di `main/app_config.h` sebelum dipakai.
 Komponen `espressif/mdns` diunduh otomatis; tanpa internet set `APP_USE_MDNS 0` dan hapus barisnya di `main/idf_component.yml`.
+Ganti target selalu dengan `idf.py set-target` (menghapus `sdkconfig` lama); `sdkconfig.defaults.<target>` dipakai otomatis.
+
+### Konsol & link HP / PC
+
+Satu port serial dibagi konsol teks dan LAP (`core/include/leumpang/lap_serial.h`): byte `0x00` pertama
+dari host memindahkan port ke mode LAP, log tetap terkirim sebagai pesan `LOG`, dan port kembali ke
+mode teks 3 s setelah host diam. Selama mode LAP, `esp_log` dibisukan agar frame tidak terpotong.
+
+| Board | Port | Default |
+|---|---|---|
+| ESP32-S3 | UART0 (USB-UART on-board) | `sdkconfig.defaults.esp32s3` |
+| ESP32-P4 | USB-Serial-JTAG (USB-C) | `sdkconfig.defaults.esp32p4` |
+
+```bash
+python3 tools/lapctl.py --serial /dev/ttyACM0 hello     # serial
+python3 tools/lapctl.py --tcp 192.168.4.1 hello         # Wi-Fi
+```
+
+### SD card
+
+S3: SDMMC 1-bit CLK 39, CMD 38, D0 40 (4-bit dengan `LA_SD_4BIT=1`: + D1 41, D2 42, D3 47). P4: slot 0 on-board (GPIO 39–44),
+daya lewat LDO on-chip kanal 4. Berkas: `/sd/motions/slotN.lam` (dimuat saat boot ke slot 0–3) dan
+`/sd/bbx/*.lbb` (blackbox 100 Hz, ditulis task prioritas rendah; `tools/bbx2csv.py` → CSV).
+Tanpa kartu, firmware tetap jalan (log `SD: tidak ada kartu`).
+
+## 5a. ESP32-P4 (FireBeetle 2)
+
+* **Wi-Fi lewat ESP32-C6 on-board** (SDIO: CLK 18, CMD 19, D0–D3 14–17, reset 54) memakai
+  `esp_hosted` 2.13.1 + `esp_wifi_remote`. API `esp_wifi` di `web.cpp` tidak berubah.
+* **C6 harus menjalankan firmware slave esp_hosted versi yang sama (v2.13.1).** Bila Wi-Fi tidak muncul
+  dan log mengeluhkan versi/transport, flash ulang C6:
+  ```bash
+  cd firmware/third_party/esp_hosted/slave
+  idf.py set-target esp32c6
+  idf.py menuconfig        # pastikan transport = SDIO (lihat README esp_hosted)
+  idf.py build flash       # lewat header UART/boot C6 di board
+  ```
+* `esp_hosted` adalah submodule (`firmware/third_party/esp_hosted`) dengan submodule bersarang
+  `common/protobuf-c` — itu sebabnya clone butuh `--recursive`.
+* Manifest `esp_hosted` di registry memakai aturan `$CONFIG{ESP_HOSTED_HOST_USB_*_MANIFEST}`;
+  opsinya didefinisikan bernilai 0 di `main/Kconfig.projbuild` (P4↔C6 lewat SDIO, bukan USB).
+* Pin P4: LED 3, RGB 51, T2 52; bus R TX 20 / RX 22 / EN 23; bus L TX 48 / RX 49 / EN 50;
+  IMU SDA 7 / SCL 8; LCD SCK 28, MOSI 29, CS 30, DC 32, RST 33 (`main/board_esp32p4.h`).
+  **Cocokkan dengan header board Anda sebelum menyambung**; build gagal (`static_assert`) bila dua fungsi
+  memakai pin yang sama atau memakai pin yang dicadangkan board (USB, flash, PSRAM, C6, TF).
 
 ## 6. Uji pertama (urut)
 
@@ -85,27 +136,32 @@ Komponen `espressif/mdns` diunduh otomatis; tanpa internet set `APP_USE_MDNS 0` 
 
 ## 7. Status verifikasi
 
-* **Belum dikompilasi dengan toolchain ESP-IDF asli** (tidak tersedia di lingkungan pembuatan) dan belum diuji di hardware.
-* Lulus `g++`/`clang++ -Wall -Wextra` terhadap stub API IDF v5.3 (`tests/idf_stubs`), semua varian konfigurasi, dan link seluruh modul (`fw_s3_linkcheck`).
-* CI GitHub Actions membangun firmware ini dengan ESP-IDF asli v5.3 & v5.4 (`.github/workflows/ci.yml`).
-* Simulasi host (`tests/test_controller.cpp`, `tests/test_parity.cpp`, ASan+UBSan): boot-sync, servo mati, echo/tanpa echo, READY→kalibrasi→BALANCE→siklus langkah 740–770, jatuh→re-arm, trim, penolakan parameter frame IMU — semua lulus.
+* CI membangun firmware dengan ESP-IDF asli di setiap push: S3 pada v5.3.2 dan v5.4.1, P4 pada v5.5.1
+  (S3 ±950 KB, P4 ±1,0 MB; keduanya ±67–69% partisi app masih kosong).
+* Simulasi host (`tests/test_controller.cpp`, `tests/test_parity.cpp`, ASan+UBSan): boot-sync, servo mati, echo/tanpa echo, READY→kalibrasi→BALANCE→siklus langkah 740–770, jatuh→re-arm, trim, gait kontinu 800, motion 810 — semua lulus. `test_parity` membuktikan core identik bit-demi-bit dengan V4.
 * Uji filter Mahony (konvergensi, integrasi gyro, penolakan impak 2 g) lulus; render LCD dicek visual.
-* API yang paling perlu dicek saat build pertama: `uart_wait_tx_idle_polling` (ganti `uart_wait_tx_done(port, 1)` bila tidak ada), field `rgb_ele_order` LCD, dan orientasi/inversi panel (`LCD_*` di `app_config.h`).
+* **Belum diuji di hardware.** Yang paling perlu dicek: polaritas EN, orientasi/inversi panel LCD
+  (`LCD_*` di `app_config.h`), polaritas daya SD, dan (P4) versi firmware slave C6.
 
 ## Struktur
 
 ```
-firmware/esp32s3/
-├─ CMakeLists.txt, sdkconfig.defaults, partitions.csv
+firmware/esp/
+├─ CMakeLists.txt, partitions.csv
+├─ sdkconfig.defaults, sdkconfig.defaults.esp32s3, sdkconfig.defaults.esp32p4
 └─ main/
-   ├─ app_config.h      pin & konfigurasi board
-   ├─ shared.h          antarmuka antar-modul (nama pendek dari leumpang-core)
-   ├─ control.cpp       HAL kontrol: UART ICS (EspIcsBus), queue, task 100 Hz di core1
-   ├─ imu_icm20948.cpp  driver ICM-20948 + Mahony (core0)
-   ├─ web.cpp           Wi-Fi AP+STA, esp_http_server, dashboard
-   ├─ lap_tcp.cpp       server protokol LAP :5760
-   ├─ local_ui.cpp      ST7789 esp_lcd DMA + WS2812 RMT
-   ├─ font5x7.h
-   └─ main.cpp          app_main, logger, konsol, NVS tertunda
+   ├─ app_config.h       konfigurasi umum + pemilih board
+   ├─ board_esp32s3.h    pin S3        board_esp32p4.h   pin P4
+   ├─ shared.h           antarmuka antar-modul (nama pendek dari leumpang-core)
+   ├─ control.cpp        HAL kontrol: UART ICS (EspIcsBus), queue, task 100 Hz di core1
+   ├─ imu_icm20948.cpp   HAL I2C untuk driver bersama la::Icm20948 + Mahony (core0)
+   ├─ console.cpp        satu-satunya penulis port konsol: teks + LAP (SerialLink)
+   ├─ storage.cpp        SD: motion, blackbox
+   ├─ web.cpp            Wi-Fi AP+STA, esp_http_server, dashboard
+   ├─ lap_tcp.cpp        server protokol LAP :5760
+   ├─ local_ui.cpp       ST7789 esp_lcd DMA + WS2812 RMT
+   ├─ Kconfig.projbuild  opsi yang dirujuk manifest esp_hosted
+   ├─ idf_component.yml  mdns; (P4) esp_wifi_remote + esp_hosted
+   └─ main.cpp           app_main, NVS tertunda
 ```
 Logika gait/keselamatan: `../../core/`. Komponen IDF pembungkusnya: `../components/leumpang_core`.
