@@ -80,12 +80,14 @@ jobs:
   studio-linux:
     name: Studio desktop (Linux, Qt 6.8) + selftest
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - name: Paket sistem (GL, xcb, xvfb)
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build xvfb libgl1-mesa-dev libegl1 libglx-mesa0 mesa-utils \
+          sudo apt-get install -y gdb ninja-build xvfb libgl1-mesa-dev libegl1 libglx-mesa0 mesa-utils \
             libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
             libxcb-shape0 libxcb-xinerama0 libxcb-image0 libxcb-xkb1 libfontconfig1 libpulse0
       - uses: jurplel/install-qt-action@v4
@@ -101,12 +103,24 @@ jobs:
         env:
           QT_QPA_PLATFORM: xcb
           LIBGL_ALWAYS_SOFTWARE: '1'
-        run: xvfb-run -a -s "-screen 0 1920x1080x24" ./build-studio/leumpang_studio --selftest studio-shots
+        run: |
+          xvfb-run -a -s "-screen 0 1920x1080x24" gdb -q -batch -return-child-result \
+            -ex run -ex "thread apply all bt 25" --args ./build-studio/leumpang_studio --selftest studio-shots
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: studio-selftest-linux
           path: studio-shots
+      - name: Tangkapan layar -> cabang ci-shots
+        if: always() && github.event_name == 'push'
+        run: |
+          [ -d studio-shots ] || exit 0
+          git config user.name "leumpang-ci"; git config user.email "ci@users.noreply.github.com"
+          mkdir -p /tmp/shots && cp -r studio-shots/. /tmp/shots/
+          git checkout --orphan ci-shots-tmp
+          git rm -rfq . >/dev/null
+          cp -r /tmp/shots/. . && git add -A
+          git commit -qm "selftest studio ${GITHUB_SHA::7} (linux)" && git push -f origin HEAD:ci-shots
 
   studio-windows:
     name: Studio desktop (Windows x64, Qt 6.8)
@@ -140,6 +154,8 @@ jobs:
           QSG_RHI_PREFER_SOFTWARE_RENDERER: '1'
         run: |
           $p = Start-Process -FilePath LeumpangStudio/leumpang_studio.exe -ArgumentList "--selftest","studio-shots-win" -PassThru -Wait -NoNewWindow
+          if (Test-Path studio-shots-win/selftest.log) { Get-Content studio-shots-win/selftest.log }
+          Write-Host "exit code: $($p.ExitCode)"
           exit $p.ExitCode
       - uses: actions/upload-artifact@v4
         with:

@@ -15,6 +15,7 @@
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QSGRendererInterface>
 #include <QTimer>
 #include <QtQuick3D/qquick3d.h>
 #include <cstdio>
@@ -67,13 +68,20 @@ int main(int argc, char** argv) {
 
     // ------------------------------------------------------------------ selftest
     QDir().mkpath(selftestDir);
+    static FILE* selfLog = std::fopen(qPrintable(selftestDir + QStringLiteral("/selftest.log")), "w");
+    auto out = [](const QString& line) {
+        std::printf("%s\n", qPrintable(line)); std::fflush(stdout);
+        if (selfLog) { std::fprintf(selfLog, "%s\n", qPrintable(line)); std::fflush(selfLog); }
+    };
     QQuickWindow* win = qobject_cast<QQuickWindow*>(engine.rootObjects().first());
+    out(QStringLiteral("selftest: jendela %1x%2, grafis %3").arg(win->width()).arg(win->height())
+            .arg(win->rendererInterface() ? (int)win->rendererInterface()->graphicsApi() : -1));
     int failures = 0;
-    auto check = [&](bool ok, const char* what) { std::printf("%s  %s\n", ok ? "ok  " : "FAIL", what); std::fflush(stdout); if (!ok) ++failures; };
+    auto check = [&](bool ok, const char* what) { out(QStringLiteral("%1  %2").arg(ok ? "ok  " : "FAIL", QString::fromUtf8(what))); if (!ok) ++failures; };
     auto shot = [&](const QString& name) {
         const QImage img = win->grabWindow();
         const bool ok = !img.isNull() && img.save(selftestDir + QLatin1Char('/') + name);
-        std::printf("      layar -> %s/%s (%dx%d)\n", qPrintable(selftestDir), qPrintable(name), img.width(), img.height());
+        out(QStringLiteral("      layar -> %1 (%2x%3)").arg(name).arg(img.width()).arg(img.height()));
         return ok;
     };
     auto tab = [&](int i) { win->setProperty("currentTab", i); };
@@ -107,12 +115,12 @@ int main(int argc, char** argv) {
         {10200, [&] { tab(5); shot(QStringLiteral("07_log.png")); check(!link.logLines().isEmpty(), "log robot tampil"); }},
         {10600, [&] {
             check(g_qmlProblems.isEmpty(), "tidak ada warning/galat QML");
-            for (const QString& p : g_qmlProblems) std::printf("      QML: %s\n", qPrintable(p));
-            std::printf("== selftest studio: %s\n", failures || !g_qmlProblems.isEmpty() ? "GAGAL" : "lulus");
+            for (const QString& p : g_qmlProblems) out(QStringLiteral("      QML: ") + p);
+            out(QStringLiteral("== selftest studio: %1").arg(failures || !g_qmlProblems.isEmpty() ? "GAGAL" : "lulus"));
             QCoreApplication::exit(failures || !g_qmlProblems.isEmpty() ? 1 : 0);
         }},
     };
     for (const Step& s : steps) QTimer::singleShot(s.atMs, &app, s.fn);
-    QTimer::singleShot(30000, &app, [] { std::printf("selftest: timeout\n"); QCoreApplication::exit(3); });
+    QTimer::singleShot(30000, &app, [out] { out(QStringLiteral("selftest: timeout")); QCoreApplication::exit(3); });
     return app.exec();
 }
