@@ -38,24 +38,16 @@ tanda IMU → BALANCE → motion `lambai` dari READY → baru `gaitEnable=1` di 
 **Ditunda dari Fase 2:** fisika MuJoCo (URDF sudah siap), pemutaran ulang blackbox `.lbb` di twin,
 cek titik berat untuk gerak kaki dari editor, model pose 3D (sekarang 2D + estimasi kedalaman dari pemendekan).
 
-## Fase 3 — "Mata" Android (Xiaomi 12 Pro + Redmi Note 11 Pro 5G)
-Fakta HP (lembar spesifikasi): **Xiaomi 12 Pro** — Snapdragon 8 Gen 1, USB-C 2.0 + OTG, 205 g,
-163,6 × 74,6 × 8,2 mm, **tanpa ToF dan tanpa UWB**. **Redmi Note 11 Pro 5G** — Snapdragon 695, USB-C 2.0 + OTG,
-202 g, juga tanpa ToF/UWB. Konsekuensinya "radar" dibuat dari AI, bukan sensor khusus:
-* Xiaomi 12 Pro = HP utama: CameraX, pose/objek/segmentasi lantai di NPU/GPU (TFLite + delegate GPU/NNAPI atau QNN),
-  **kedalaman monokular** (model depth) + ARCore Depth bila didukung, IMU HP sebagai referensi kedua.
-* Redmi Note 11 Pro 5G = cadangan / kamera kedua (stereo kasar atau pengamat dari luar), lewat Wi-Fi.
-* Fusi → `PERCEPTION` + `GAIT_INTENT` via USB-OTG (CDC-ACM, usb-serial-for-android); watchdog & mode aman.
+## Fase 3 — "Mata" Android ✅ (kode + CI; ⏳ uji di HP & robot)
+* **Leumpang Mata** (`android/`, Kotlin, Compose): kamera kepala (kamera utama HP yang dipindah, CameraX) atau USB-UVC
+  (bila HP mengekspos ke Camera2), MediaPipe (objek, isyarat, wajah + daftar nama), ucapan id-ID + TTS.
+* **Hindari rintangan**: ruang bebas berbasis warna lantai + kotak objek → proyeksi lantai dengan tinggi/pitch kamera dari
+  telemetry → peta 9 sektor → `PERCEPTION` (refleks firmware) + perencana VFH. **Ikuti orang** dengan jaga jarak 1 m.
+  **Isyarat tangan** dan **perintah suara** → arbiter perilaku (satu-satunya yang menggerakkan robot).
+* **Firmware core 0.8.0**: refleks rintangan (`obstacleStopMm`), `EXT` untuk modul/sensor tambahan.
+* **Leumpang Bus** ([BUS.md](BUS.md)): pub/sub topik di HP, WebSocket JSON `:8765` untuk PC/skrip/board lain, EXT ke robot.
+* Teruji: 18 tes Kotlin (termasuk integrasi lawan simulator C++: refleks rintangan nyata), 50 cek controller.
 
-**Soal kamera di kepala:** modul kamera internal HP tersambung kabel flex MIPI beberapa cm ke mainboard; memindahkannya
-ke kepala praktis tidak mungkin tanpa merusak HP. Pilihan yang realistis:
-1. **Kamera USB (UVC) kecil di kepala** + hub OTG yang mendukung pengisian (HP tetap di punggung): satu port USB 2.0 HP
-   dibagi kamera MJPEG 720p30 dan serial robot. Android membaca UVC lewat pustaka UVC/`libuvc`.
-2. HP dipasang tegak sebagai "wajah" (kamera belakang menghadap depan) — paling sederhana, tetapi 205 g di kepala
-   menaikkan titik berat; perlu dicek di twin (opsi HP sudah ada di model).
-3. Periskop cermin dari kamera HP di punggung ke atas — murah, tetapi rapuh dan gambar terbalik.
-
-## Keputusan yang masih terbuka (Fase 3)
-1. Opsi kamera kepala (1 / 2 / 3 di atas).
-2. Hub OTG + catu: apakah HP ikut diisi dari baterai robot?
-3. Prioritas persepsi pertama: hindari rintangan, ikuti orang, atau kenali objek/isyarat tangan.
+**Belum / berikutnya:** uji di Xiaomi 12 Pro + robot; jalur UVC berbasis libusb untuk HP yang tidak mengekspos kamera
+eksternal; kedalaman monokular (model depth) untuk lantai bertekstur ramai; klasifikasi suara lingkungan; pasang
+`extHook` sensor nyata di HAL ESP32/STM32; studio sebagai klien Leumpang Bus (lihat apa yang dilihat robot).

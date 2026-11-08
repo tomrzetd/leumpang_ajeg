@@ -25,7 +25,8 @@ simulator, studio desktop dengan digital twin 3D, serta protokol bersama untuk H
 | Simulator host + `lapctl` | ✅ |
 | **Leumpang Studio** (Qt 6, Windows/Linux): twin 3D, servo, gerak, kamera pose | ✅ CI + selftest |
 | Model 3D parametrik (STL + URDF) | ✅ |
-| Aplikasi Android "mata" | Fase 3 |
+| **Leumpang Mata** (Android): hindari rintangan, ikuti orang, isyarat tangan, wajah/objek, suara | ✅ kode + CI; ⏳ uji di HP |
+| Refleks rintangan firmware (`PERCEPTION`) + Leumpang Bus API (`EXT`, WebSocket) | ✅ simulasi |
 
 Lihat [docs/ROADMAP.md](docs/ROADMAP.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
@@ -47,6 +48,11 @@ Di terminal simulator Anda juga bisa mengetik perintah konsol robot (`r g x c t 
 Unduh paket Windows dari tab **Actions** → run terbaru di `main` → artefak **LeumpangStudio-windows-x64**,
 ekstrak, jalankan `leumpang_studio.exe`, pilih **Simulator** → **Hubungkan** untuk mencoba tanpa robot.
 Detail fitur dan build: [studio/README.md](studio/README.md).
+
+## Leumpang Mata (Android)
+
+APK dari tab **Actions** → artefak **LeumpangMata-apk**. Panduan pasang, kamera kepala, dan daya: [android/README.md](android/README.md).
+API antar-modul / sensor: [docs/BUS.md](docs/BUS.md).
 
 ## Clone
 
