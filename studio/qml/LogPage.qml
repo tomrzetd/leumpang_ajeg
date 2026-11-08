@@ -31,7 +31,7 @@ Item {
                 font.family: "monospace"
                 font.pixelSize: 12
                 wrapMode: Text.WrapAnywhere
-                color: modelData.indexOf("FALLEN") >= 0 || modelData.indexOf("ditolak") >= 0 || modelData.indexOf("ACK") >= 0 ? "#f0ad4e" : palette.text
+                color: modelData.indexOf("FALLEN") >= 0 || modelData.indexOf("ditolak") >= 0 || modelData.indexOf("ACK") >= 0 ? "#f0ad4e" : "#d8dde3"
             }
         }
     }

@@ -96,12 +96,12 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             Layout.leftMargin: 4
-            Label { text: "sendi"; Layout.preferredWidth: 112; opacity: 0.6 }
+            Label { text: "sendi"; Layout.preferredWidth: 140; opacity: 0.6 }
             Label { text: "pose kerja"; Layout.fillWidth: true; opacity: 0.6 }
             Label { text: "kerja"; Layout.preferredWidth: 52; horizontalAlignment: Text.AlignRight; opacity: 0.6 }
             Label { text: "perintah"; Layout.preferredWidth: 58; horizontalAlignment: Text.AlignRight; opacity: 0.6 }
             Label { text: "aktual"; Layout.preferredWidth: 58; horizontalAlignment: Text.AlignRight; opacity: 0.6 }
-            Label { text: "trim"; Layout.preferredWidth: 118; horizontalAlignment: Text.AlignHCenter; opacity: 0.6 }
+            Label { text: "trim"; Layout.preferredWidth: 112; horizontalAlignment: Text.AlignHCenter; opacity: 0.6 }
         }
 
         ListView {
@@ -116,7 +116,7 @@ Item {
                 required property var modelData
                 required property int index
                 width: ListView.view.width
-                height: 40
+                height: 44
                 color: hover.hovered ? "#2c333b" : (index % 2 ? "#20252b" : "transparent")
                 readonly property int cmdV: robot.kinSrc.length === 22 ? robot.kinSrc[index] : 0
                 readonly property int fbV: robot.fbSrc.length === 22 ? robot.fbSrc[index] : 0
@@ -131,7 +131,7 @@ Item {
                     anchors.rightMargin: 4
                     spacing: 6
                     Rectangle { width: 8; height: 8; radius: 4; color: !robot.connected ? "#5a6370" : (row.ok ? "#3fa34d" : "#d9534f") }
-                    Label { text: row.modelData.name; Layout.preferredWidth: 100; elide: Text.ElideRight; font.bold: true }
+                    Label { text: row.modelData.name; Layout.preferredWidth: 124; elide: Text.ElideRight; font.bold: true; font.pixelSize: 13 }
                     Slider {
                         id: slider
                         Layout.fillWidth: true
@@ -151,21 +151,31 @@ Item {
                         text: robot.connected ? row.fbV : "-"
                         Layout.preferredWidth: 58
                         horizontalAlignment: Text.AlignRight
-                        color: robot.connected && Math.abs(row.fbV - row.cmdV) > 150 ? "#f0ad4e" : palette.text
+                        color: robot.connected && Math.abs(row.fbV - row.cmdV) > 150 ? "#f0ad4e" : "#d8dde3"
                     }
-                    SpinBox {
-                        id: trimBox
-                        Layout.preferredWidth: 118
-                        from: -1000
-                        to: 1000
-                        stepSize: 5
-                        editable: true
-                        enabled: robot.connected
-                        onValueModified: robot.setTrim(row.modelData.bus, row.modelData.slot, value)
-                        Binding on value {
-                            when: !trimBox.activeFocus
-                            value: robot.trim.length === 22 ? robot.trim[row.index] : 0
-                            restoreMode: Binding.RestoreNone
+                    RowLayout {
+                        Layout.preferredWidth: 112
+                        spacing: 0
+                        readonly property int trimV: robot.trim.length === 22 ? robot.trim[row.index] : 0
+                        ToolButton {
+                            text: "\u2212"
+                            enabled: robot.connected
+                            implicitWidth: 34
+                            onClicked: robot.setTrim(row.modelData.bus, row.modelData.slot, Math.max(-1000, parent.trimV - 5))
+                            autoRepeat: true
+                        }
+                        Label {
+                            text: robot.connected ? parent.trimV : "-"
+                            Layout.preferredWidth: 40
+                            horizontalAlignment: Text.AlignHCenter
+                            color: parent.trimV !== 0 ? "#E86A1C" : "#d8dde3"
+                        }
+                        ToolButton {
+                            text: "+"
+                            enabled: robot.connected
+                            implicitWidth: 34
+                            onClicked: robot.setTrim(row.modelData.bus, row.modelData.slot, Math.min(1000, parent.trimV + 5))
+                            autoRepeat: true
                         }
                     }
                 }

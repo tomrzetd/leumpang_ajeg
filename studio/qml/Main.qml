@@ -108,7 +108,7 @@ ApplicationWindow {
             Label { text: "roll " + robot.roll.toFixed(1) + "°   pitch " + robot.pitch.toFixed(1) + "°" }
             Label { text: "IMU " + robot.imuHz + " Hz" }
             Label { text: "loop " + robot.loopAvgUs + " / " + robot.loopMaxUs + " µs   ICS " + robot.servoPhaseUs + " µs" }
-            Label { text: "servo OK " + robot.fbOk + "/22"; color: robot.connected && robot.fbOk < 22 ? "#f0ad4e" : palette.text }
+            Label { text: "servo OK " + robot.fbOk + "/22"; color: robot.connected && robot.fbOk < 22 ? "#f0ad4e" : "#d8dde3" }
             Label { text: "autoH " + robot.autoH.toFixed(1) + " mm" }
             Item { Layout.fillWidth: true }
             Label { text: robot.connected ? (robot.robotName + "  " + robot.boardName + "  fw " + robot.fwVersion) : "offline"; opacity: 0.7 }

@@ -119,6 +119,7 @@ jobs:
           mkdir -p /tmp/shots && cp -r studio-shots/. /tmp/shots/
           git checkout --orphan ci-shots-tmp
           git rm -rfq . >/dev/null
+          git clean -fdxq
           cp -r /tmp/shots/. . && git add -A
           git commit -qm "selftest studio ${GITHUB_SHA::7} (linux)" && git push -f origin HEAD:ci-shots
 
@@ -177,5 +178,6 @@ jobs:
           mkdir -p ../shots && cp -r studio-shots-win/. ../shots/
           git checkout -q --orphan ci-shots-tmp
           git rm -rfq . >/dev/null
+          git clean -fdxq
           cp -r ../shots/. . && git add -A
           git commit -qm "selftest studio ${GITHUB_SHA::7} (windows)" && git push -f origin HEAD:ci-shots-win

@@ -98,7 +98,7 @@ Item {
                 required property var modelData
                 required property int index
                 width: ListView.view.width
-                height: 44
+                height: 50
                 color: page.selected === index ? "#3a2a1c" : (index % 2 ? "#20252b" : "transparent")
                 border.color: page.selected === index ? "#E86A1C" : "transparent"
                 MouseArea {
@@ -112,14 +112,12 @@ Item {
                     spacing: 6
                     Label { text: "#" + (fr.index + 1); Layout.preferredWidth: 34; font.bold: true }
                     Label { text: (fr.modelData.startMs / 1000).toFixed(2) + " s"; Layout.preferredWidth: 56; opacity: 0.6 }
-                    SpinBox {
-                        from: 20
-                        to: 10000
-                        stepSize: 50
-                        editable: true
-                        value: fr.modelData.ms
-                        Layout.preferredWidth: 130
-                        onValueModified: motion.setFrameMs(fr.index, value)
+                    TextField {
+                        text: fr.modelData.ms
+                        Layout.preferredWidth: 76
+                        horizontalAlignment: Text.AlignRight
+                        validator: IntValidator { bottom: 20; top: 10000 }
+                        onEditingFinished: if (acceptableInput && Number(text) !== fr.modelData.ms) motion.setFrameMs(fr.index, Number(text))
                     }
                     Label { text: "ms"; opacity: 0.6 }
                     ComboBox {

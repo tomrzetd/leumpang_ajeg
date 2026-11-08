@@ -21,7 +21,11 @@ RobotLink::RobotLink(QObject* parent) : QObject(parent) {
             const QByteArray b = simRx_; simRx_.clear();
             sim_->fromHost((const uint8_t*)b.constData(), (size_t)b.size());
         }
-        sim_->advance(1);
+        // simulasi real-time: kejar waktu dinding bila UI sempat tersendat (maks 10 siklus per tick)
+        const qint64 due = simClock_.elapsed() / (qint64)CONTROL_PERIOD_MS;
+        int n = 0;
+        while (simCycles_ < due && n < 10) { sim_->advance(1); ++simCycles_; ++n; }
+        if (simCycles_ < due) simCycles_ = due;                // tertinggal jauh: lewati, jangan menumpuk
     });
     pingTimer_.setInterval(1000);
     connect(&pingTimer_, &QTimer::timeout, this, [this] {
@@ -129,7 +133,9 @@ void RobotLink::connectSerial(const QString& portLabel, int baud) {
 void RobotLink::connectSim() {
     disconnectLink();
     sim_.reset(new SimRobot);
-    sim_->start([this](const uint8_t* d, size_t n) { onBytes(QByteArray((const char*)d, (int)n)); });
+    sim_->start([this](const uint8_t* d, size_t n) { onBytes(QByteArray((const char*)d, (int)n)); }, nullptr, false);
+    simClock_.start();
+    simCycles_ = 0;
     attached(Sim, tr("Simulator (di dalam studio)"));
     simTimer_.start();
 }

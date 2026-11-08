@@ -3,6 +3,7 @@
 #include "lap_client.h"
 #include "sim_robot.h"
 
+#include <QElapsedTimer>
 #include <QObject>
 #include <QStringList>
 #include <QTimer>
@@ -121,6 +122,8 @@ private:
     std::unique_ptr<la::studio::SimRobot> sim_;
     QByteArray simRx_;                 // host -> sim (diproses per siklus sim)
     QTimer simTimer_, pingTimer_;
+    QElapsedTimer simClock_;
+    qint64 simCycles_ = 0;
     qint64 lastRxMs_ = 0;
     QStringList log_;
     QString logPartial_;
