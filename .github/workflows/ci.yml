@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  host:
+    name: Core + simulator + tes (Linux, ASan/UBSan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+      - name: Build
+        run: cmake --build build -j
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  host-macos:
+    name: Core + simulator + tes (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -B build -DLA_FIRMWARE_CHECK=OFF
+      - run: cmake --build build -j
+      - run: ctest --test-dir build --output-on-failure
+
+  firmware-esp32s3:
+    name: Firmware ESP32-S3 (ESP-IDF ${{ matrix.idf }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        idf: [v5.3.2, v5.4.1]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build firmware
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: ${{ matrix.idf }}
+          target: esp32s3
+          path: firmware/esp32s3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: leumpang-esp32s3-${{ matrix.idf }}
+          path: |
+            firmware/esp32s3/build/*.bin
+            firmware/esp32s3/build/bootloader/bootloader.bin
+            firmware/esp32s3/build/partition_table/partition-table.bin

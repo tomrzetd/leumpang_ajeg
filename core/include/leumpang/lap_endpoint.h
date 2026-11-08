@@ -1,0 +1,57 @@
+// =============================================================================
+//  LapEndpoint: sisi robot dari protokol LAP (dipakai semua board + simulator)
+//  Satu instance per link (USB CDC, koneksi TCP). Dipanggil dari SATU thread
+//  komunikasi; tidak pernah dari task kontrol.
+//
+//  Aturan link:
+//   * Stream telemetry hanya aktif setelah host mengirim HELLO atau STREAM_CFG.
+//   * Host wajib mengirim paket apa pun (mis. PING) minimal tiap 3 s; bila tidak,
+//     stream berhenti (link dianggap putus). Fase 1: GAIT_INTENT ikut berhenti.
+// =============================================================================
+#pragma once
+#include "leumpang/lap.h"
+
+namespace la {
+namespace lap {
+
+class LapEndpoint {
+public:
+    struct Host {
+        void* ctx = nullptr;
+        void     (*write)(void* ctx, const uint8_t* d, size_t n) = nullptr;
+        bool     (*submit)(void* ctx, const Command& c) = nullptr;       // false = antrean penuh
+        void     (*snapshot)(void* ctx, Telemetry& t) = nullptr;
+        uint32_t (*savedGen)(void* ctx) = nullptr;                        // boleh nullptr
+        bool     (*simHook)(void* ctx, const Packet& p) = nullptr;        // SIM_*; nullptr = tidak didukung
+    };
+    static constexpr uint32_t LINK_TIMEOUT_MS = 3000;
+
+    void init(const Host& h, const Hello& self);
+    void onBytes(const uint8_t* d, size_t n, uint32_t nowMs);
+    void poll(uint32_t nowMs);              // panggil >= 50 Hz
+    void sendLog(const char* line);         // kirim LOG bila link aktif & logOn
+    bool linkActive() const { return active_; }
+    const Decoder& decoder() const { return dec_; }
+
+private:
+    void handle(const Packet& p, uint32_t nowMs);
+    template <typename M> void send(uint8_t type, const M& m) {
+        Packet p;
+        if (makePacket(p, type, seq_++, m)) sendPacket(p);
+    }
+    void sendPacket(const Packet& p);
+    void ack(const Packet& p, uint8_t status);
+    void sendConfig();
+
+    Host         h_{};
+    Hello        self_{};
+    Decoder      dec_{};
+    StreamCfgMsg stream_{};
+    bool         active_ = false;
+    uint8_t      seq_ = 0;
+    uint32_t     lastRxMs_ = 0, lastTele_ = 0, lastServo_ = 0, lastGait_ = 0, lastCfgGen_ = 0xFFFFFFFF;
+    Telemetry    snap_{};
+};
+
+}  // namespace lap
+}  // namespace la
