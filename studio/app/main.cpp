@@ -86,6 +86,12 @@ int main(int argc, char** argv) {
     };
     auto tab = [&](int i) { win->setProperty("currentTab", i); };
 
+    QTimer* livePose = new QTimer(&app);
+    livePose->setInterval(100);
+    QObject::connect(livePose, &QTimer::timeout, &app, [&] {
+        QVariantList p = twin.homeSrc(); p[4] = -1000; p[11 + 2] = 1800;
+        link.poseTarget(p, (1u << 4) | (1u << 13), 400);
+    });
     struct Step { int atMs; std::function<void()> fn; };
     QList<Step> steps = {
         {300, [&] { link.connectSim(); }},
@@ -106,14 +112,13 @@ int main(int argc, char** argv) {
         {8500, [&] { check(link.mode() == 720, "gerak selesai -> READY"); motion.seek(1400); shot(QStringLiteral("03_pratinjau_gerak.png")); }},
         {8800, [&] {
             twin.clearPreview(QString());
-            QVariantList p = twin.homeSrc(); p[4] = -1000; p[11 + 2] = 1800;
-            link.poseTarget(p, (1u << 4) | (1u << 13), 600);
+            livePose->start();                                        // seperti UI: kirim ulang < ttl
         }},
-        {9300, [&] { check(link.mode() == 820, "live pose (mode 820)"); tab(2); shot(QStringLiteral("04_kamera.png")); }},
-        {9600, [&] { tab(3); shot(QStringLiteral("05_jalan.png")); }},
-        {9900, [&] { tab(4); shot(QStringLiteral("06_parameter.png")); }},
-        {10200, [&] { tab(5); shot(QStringLiteral("07_log.png")); check(!link.logLines().isEmpty(), "log robot tampil"); }},
-        {10600, [&] {
+        {9800, [&] { check(link.mode() == 820, "live pose (mode 820)"); tab(2); shot(QStringLiteral("04_kamera.png")); livePose->stop(); }},
+        {10100, [&] { tab(3); shot(QStringLiteral("05_jalan.png")); }},
+        {10400, [&] { tab(4); shot(QStringLiteral("06_parameter.png")); }},
+        {10700, [&] { tab(5); shot(QStringLiteral("07_log.png")); check(!link.logLines().isEmpty(), "log robot tampil"); }},
+        {11100, [&] {
             check(g_qmlProblems.isEmpty(), "tidak ada warning/galat QML");
             for (const QString& p : g_qmlProblems) out(QStringLiteral("      QML: ") + p);
             out(QStringLiteral("== selftest studio: %1").arg(failures || !g_qmlProblems.isEmpty() ? "GAGAL" : "lulus"));
