@@ -36,33 +36,42 @@ Item {
         Flow {
             Layout.fillWidth: true
             spacing: 6
-            Button { text: "Baru"; onClicked: { motion.clear(); page.selected = -1 } }
-            Button { text: "Buka JSON"; onClicked: openJson.open() }
-            Button { text: "Simpan JSON"; onClicked: saveJson.open() }
-            Button { text: "Impor .lam"; onClicked: openLam.open() }
-            Button { text: "Ekspor .lam"; onClicked: saveLam.open() }
-            Button { text: "Contoh: lambai"; flat: true; onClicked: motion.loadExample() }
-        }
-        Flow {
-            Layout.fillWidth: true
-            spacing: 6
-            Button { text: "+ dari pose kerja"; highlighted: true; onClicked: motion.addFrame(page.studio.workPose, 600, page.selected >= 0 ? page.selected + 1 : -1) }
             Button {
-                text: "+ dari robot (aktual)"
+                text: "Berkas \u25be"
+                onClicked: fileMenu.open()
+                Menu {
+                    id: fileMenu
+                    MenuItem { text: "Baru"; onTriggered: { motion.clear(); page.selected = -1 } }
+                    MenuItem { text: "Buka JSON..."; onTriggered: openJson.open() }
+                    MenuItem { text: "Simpan JSON..."; onTriggered: saveJson.open() }
+                    MenuSeparator {}
+                    MenuItem { text: "Impor .lam..."; onTriggered: openLam.open() }
+                    MenuItem { text: "Ekspor .lam..."; onTriggered: saveLam.open() }
+                    MenuSeparator {}
+                    MenuItem { text: "Contoh: lambai"; onTriggered: motion.loadExample() }
+                }
+            }
+            Button { text: "+ pose kerja"; highlighted: true; onClicked: motion.addFrame(page.studio.workPose, 600, page.selected >= 0 ? page.selected + 1 : -1) }
+            Button {
+                text: "+ robot aktual"
                 enabled: robot.fbSrc.length === 22
                 onClicked: motion.addFrame(robot.fbSrc, 600, page.selected >= 0 ? page.selected + 1 : -1)
                 ToolTip.visible: hovered
                 ToolTip.text: "Teach-by-hand: lepas servo, bentuk pose dengan tangan, lalu tambahkan"
             }
             Button {
-                text: "Timpa frame dgn pose kerja"
+                text: "Timpa frame"
                 enabled: page.selected >= 0
                 onClicked: motion.setFramePose(page.selected, page.studio.workPose)
+                ToolTip.visible: hovered
+                ToolTip.text: "Ganti pose frame terpilih dengan pose kerja (tab Servo)"
             }
             Button {
-                text: "Frame → pose kerja"
+                text: "Frame \u2192 kerja"
                 enabled: page.selected >= 0
                 onClicked: page.studio.workPose = motion.framePose(page.selected)
+                ToolTip.visible: hovered
+                ToolTip.text: "Salin pose frame terpilih ke pose kerja untuk diedit di tab Servo"
             }
         }
 
