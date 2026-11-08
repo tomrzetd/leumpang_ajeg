@@ -9,6 +9,7 @@ dependencies:
   # ESP32-P4 butuh ESP-IDF >= 5.5 (manajer komponen lama tidak bisa membaca aturan $CONFIG).
   espressif/esp_wifi_remote:
     version: "1.6.5"
+    override_path: "../../third_party/esp_wifi_remote"
     rules:
       - if: "target in [esp32p4]"
   espressif/esp_hosted:

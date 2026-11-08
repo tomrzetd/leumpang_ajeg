@@ -3,6 +3,7 @@ ENTRY(Reset_Handler)
 _estack = ORIGIN(RAM) + LENGTH(RAM);
 _Min_Heap_Size  = 0x4000;   /* 16 KB: newlib (printf float), FatFs tidak memakai heap */
 _Min_Stack_Size = 0x2000;   /* 8 KB: main + ISR bertingkat */
+_sstack = _estack - _Min_Stack_Size;   /* batas bawah stack -> MSPLIM (startup ST) */
 
 MEMORY
 {
@@ -54,6 +55,8 @@ SECTIONS
     . = . + _Min_Stack_Size;
     . = ALIGN(8);
   } >RAM
+
+  ASSERT(_end + _Min_Heap_Size <= _sstack, "RAM habis: heap menabrak stack")
 
   /DISCARD/ : { libc.a ( * ) libm.a ( * ) libgcc.a ( * ) }
   .ARM.attributes 0 : { *(.ARM.attributes) }

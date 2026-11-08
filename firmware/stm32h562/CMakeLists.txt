@@ -43,7 +43,7 @@ set(DEVICE_SRC
   ${st_device_SOURCE_DIR}/Source/Templates/gcc/startup_stm32h562xx.s)
 set(TUSB ${tinyusb_SOURCE_DIR}/src)
 set(TUSB_SRC
-  ${TUSB}/tusb.c ${TUSB}/common/tusb_fifo.c ${TUSB}/device/usbd.c ${TUSB}/device/usbd_control.c
+  ${TUSB}/tusb.c ${TUSB}/common/tusb_fifo.c ${TUSB}/device/usbd.c
   ${TUSB}/class/cdc/cdc_device.c ${TUSB}/portable/st/stm32_fsdev/dcd_stm32_fsdev.c
   ${TUSB}/portable/st/stm32_fsdev/fsdev_common.c)
 set(FATFS_SRC ${st_fatfs_SOURCE_DIR}/source/ff.c)
@@ -53,7 +53,7 @@ set(CORE_SRC ${CORE}/src/controller.cpp ${CORE}/src/lap.cpp ${CORE}/src/lap_endp
              ${CORE}/src/lap_serial.cpp ${CORE}/src/motion.cpp ${CORE}/src/icm20948.cpp)
 
 set(APP_SRC src/main.cpp src/clock.cpp src/ics_bus.cpp src/imu.cpp src/storage.cpp
-            src/sd_diskio.c src/usb_descriptors.c src/stm32_it.c)
+            src/sd_diskio.c src/usb_descriptors.c src/stm32_it.c src/syscalls.c)
 
 add_executable(leumpang_h562 ${APP_SRC} ${CORE_SRC} ${HAL_SRC} ${DEVICE_SRC} ${TUSB_SRC} ${FATFS_SRC})
 set_target_properties(leumpang_h562 PROPERTIES SUFFIX ".elf")

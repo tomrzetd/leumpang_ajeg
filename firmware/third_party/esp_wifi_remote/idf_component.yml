@@ -1,0 +1,13 @@
+version: 1.6.5
+url: https://github.com/espressif/esp-wifi-remote
+description: Utility wrapper for esp_wifi functionality on remote targets
+dependencies:
+  idf:
+    version: '>=5.3'
+  espressif/esp_hosted:
+    version: '>=2.11'
+    rules:
+    - if: "target in [esp32h2, esp32p4]"
+  # [leumpang_ajeg] Dependensi wifi_remote_over_eppp dihapus: proyek ini memakai backend
+  # ESP-HOSTED (SDIO ke ESP32-C6). Rantai eppp_link -> usb_host_* membawa aturan $CONFIG
+  # yang membuat konfigurasi IDF 5.5 gagal. Salinan dari tag wifi_remote-v1.6.5 (Apache-2.0).
