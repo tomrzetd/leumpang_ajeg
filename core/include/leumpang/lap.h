@@ -42,6 +42,7 @@ enum MsgType : uint8_t {
     MOTION_CHUNK = 0x41,
     MOTION_END   = 0x42,
     MOTION_PLAY  = 0x43,
+    MOTION_STATUS= 0x44,   // robot -> host: isi 4 slot
     SIM_IMU      = 0x70,   // hanya simulator
     SIM_FAULT    = 0x71,
 };
@@ -49,7 +50,8 @@ enum MsgType : uint8_t {
 enum AckStatus : uint8_t { OK = 0, BAD_LEN = 1, UNSUPPORTED = 2, REJECTED_STATE = 3, BUSY = 4, BAD_VALUE = 5 };
 enum Role  : uint8_t { ROLE_ROBOT = 0, ROLE_PHONE = 1, ROLE_DESKTOP = 2, ROLE_SIM = 3, ROLE_TOOL = 4 };
 enum Board : uint8_t { BOARD_UNKNOWN = 0, BOARD_ESP32S3 = 1, BOARD_ESP32P4 = 2, BOARD_STM32H562 = 3, BOARD_SIM = 4 };
-enum CmdId : uint8_t { CMD_RESET = 0, CMD_GO = 1, CMD_STOP = 2, CMD_CAL = 3, CMD_GET_CONFIG = 4, CMD_HELLO = 5 };
+enum CmdId : uint8_t { CMD_RESET = 0, CMD_GO = 1, CMD_STOP = 2, CMD_CAL = 3, CMD_GET_CONFIG = 4, CMD_HELLO = 5,
+                      CMD_MOTION_LIST = 6 };
 enum Caps  : uint32_t {
     CAP_WIFI = 1u << 0, CAP_SD = 1u << 1, CAP_GAIT_INTENT = 1u << 2, CAP_MOTION = 1u << 3,
     CAP_SIM = 1u << 4, CAP_LCD = 1u << 5, CAP_USB_CDC = 1u << 6,
@@ -57,7 +59,7 @@ enum Caps  : uint32_t {
 // Flag TELEMETRY
 enum TeleFlags : uint16_t {
     TF_IMU_FRESH = 1u << 0, TF_IMU_INIT = 1u << 1, TF_CAL_DONE = 1u << 2,
-    TF_PERSIST_PENDING = 1u << 3, TF_JIKU_LEFT = 1u << 4,
+    TF_PERSIST_PENDING = 1u << 3, TF_JIKU_LEFT = 1u << 4, TF_INTENT_ACTIVE = 1u << 5,
 };
 
 // ---- primitif ---------------------------------------------------------------
@@ -213,9 +215,18 @@ struct SetTrimMsg   { uint8_t bus = 0, slot = 0; int16_t value = 0;
 struct StreamCfgMsg { uint8_t teleHz = 20, servoHz = 5, gaitHz = 0, logOn = 1;
     void enc(Writer& w) const { w.u8(teleHz); w.u8(servoHz); w.u8(gaitHz); w.u8(logOn); }
     bool dec(Reader& r) { teleHz = r.u8(); servoHz = r.u8(); gaitHz = r.u8(); logOn = r.u8(); return r.ok(); } };
-struct GaitIntentMsg { float vx = 0, vy = 0, yawRate = 0; uint16_t ttlMs = 0;   // mm/langkah, deg/s
-    void enc(Writer& w) const { w.f32(vx); w.f32(vy); w.f32(yawRate); w.u16(ttlMs); }
-    bool dec(Reader& r) { vx = r.f32(); vy = r.f32(); yawRate = r.f32(); ttlMs = r.u16(); return r.ok(); } };
+struct GaitIntentMsg { float vx = 0, vy = 0, yawDeg = 0; uint16_t ttlMs = 0;   // mm/langkah, deg/langkah, ttl <= 1000
+    void enc(Writer& w) const { w.f32(vx); w.f32(vy); w.f32(yawDeg); w.u16(ttlMs); }
+    bool dec(Reader& r) { vx = r.f32(); vy = r.f32(); yawDeg = r.f32(); ttlMs = r.u16(); return r.ok(); } };
+struct MotionBeginMsg { uint8_t slot = 0; uint16_t total = 0;
+    void enc(Writer& w) const { w.u8(slot); w.u16(total); } bool dec(Reader& r) { slot = r.u8(); total = r.u16(); return r.ok(); } };
+struct MotionEndMsg   { uint8_t slot = 0; uint8_t save = 1;           // save=1 -> HAL simpan ke SD
+    void enc(Writer& w) const { w.u8(slot); w.u8(save); } bool dec(Reader& r) { slot = r.u8(); save = r.remaining() ? r.u8() : 1; return r.ok(); } };
+struct MotionPlayMsg  { uint8_t slot = 0, play = 1;
+    void enc(Writer& w) const { w.u8(slot); w.u8(play); } bool dec(Reader& r) { slot = r.u8(); play = r.u8(); return r.ok(); } };
+struct MotionStatusMsg { uint8_t state[4]{}, nFrames[4]{}; char name[4][17]{};
+    void enc(Writer& w) const { for (int i = 0; i < 4; ++i) { w.u8(state[i]); w.u8(nFrames[i]); w.fixstr(name[i], 16); } }
+    bool dec(Reader& r) { for (int i = 0; i < 4; ++i) { state[i] = r.u8(); nFrames[i] = r.u8(); r.fixstr(name[i], 16); } return r.ok(); } };
 struct SimImuMsg    { float rollDeg = 0, pitchDeg = 0; uint8_t sensorOk = 1;
     void enc(Writer& w) const { w.f32(rollDeg); w.f32(pitchDeg); w.u8(sensorOk); }
     bool dec(Reader& r) { rollDeg = r.f32(); pitchDeg = r.f32(); sensorOk = r.u8(); return r.ok(); } };

@@ -84,7 +84,7 @@ void fillTelemetry(const Telemetry& t, uint32_t savedGen, TelemetryMsg& m) {
     m.ms = t.ms; m.mode = (uint16_t)t.mode;
     m.flags = (uint16_t)((t.imuFreshFlag ? TF_IMU_FRESH : 0) | (t.imuInit ? TF_IMU_INIT : 0) |
                          (t.calDone ? TF_CAL_DONE : 0) | (t.cfgGen != savedGen ? TF_PERSIST_PENDING : 0) |
-                         (t.jikuasi ? TF_JIKU_LEFT : 0));
+                         (t.jikuasi ? TF_JIKU_LEFT : 0) | (t.intentActive ? TF_INTENT_ACTIVE : 0));
     m.rollDeg = t.roll * kRad2Deg; m.pitchDeg = t.pitch * kRad2Deg;
     m.imuAgeMs = (int16_t)clampi(t.imuAgeMs, -1, 32767);
     m.imuHz = t.imuHz; m.fwct = t.fwct; m.autoH = t.autoH;
@@ -123,6 +123,9 @@ void fillConfig(const RuntimeConfig& c, uint32_t cfgGen, uint32_t savedGen, Conf
     m.v[(int)ParamId::SIGN_ROLL]         = (float)c.imuRollSign;
     m.v[(int)ParamId::SIGN_PITCH]        = (float)c.imuPitchSign;
     m.v[(int)ParamId::IMU_SWAP]          = c.imuSwap ? 1.0f : 0.0f;
+    m.v[(int)ParamId::GAIT_ENABLE]       = c.gaitEnable ? 1.0f : 0.0f;
+    m.v[(int)ParamId::GAIT_STEP_MAX]     = c.gaitStepMax;
+    m.v[(int)ParamId::GAIT_YAW_MAX_DEG]  = c.gaitYawMaxRad * kRad2Deg;
     m.cfgGen = cfgGen; m.savedGen = savedGen;
 }
 

@@ -1,0 +1,12 @@
+{
+  "name": "lambai",
+  "returnHome": true,
+  "frames": [
+    {"ms": 700, "joints": {"R SHOULDER P": -1200, "R SHOULDER R": 900, "R ELBOW": -500}},
+    {"ms": 350, "joints": {"R ELBOW": -1100}},
+    {"ms": 350, "joints": {"R ELBOW": -500}},
+    {"ms": 350, "joints": {"R ELBOW": -1100}},
+    {"ms": 350, "joints": {"R ELBOW": -500}},
+    {"ms": 700, "joints": {"R SHOULDER P": -2700, "R SHOULDER R": 0, "R ELBOW": 0}}
+  ]
+}

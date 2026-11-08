@@ -37,6 +37,7 @@ namespace {
 int64_t g_now = 0;                 // jam simulasi (us)
 bool    g_fast = false;
 bool    g_quiet = false;
+bool    g_gaitEnable = false;
 auto    g_t0 = std::chrono::steady_clock::now();
 volatile sig_atomic_t g_stop = 0;
 
@@ -102,6 +103,8 @@ struct SimInbox : la::Inbox {
 } g_inbox;
 
 la::Controller       g_ctrl;
+la::BlackboxRing     g_bb;
+FILE*                g_bbFile = nullptr;
 la::lap::LapEndpoint g_ep;
 int                  g_client = -1;
 
@@ -149,6 +152,9 @@ int listenOn(uint16_t port) {
 
 void usage() {
     puts("leumpang_sim [--port N] [--fast] [--seconds S] [--dead B:S] [--home-start] [--quiet] [--no-stdin]\n"
+         "             [--gait] [--blackbox file.lbb]\n"
+         "  --gait       aktifkan gaitEnable (GAIT_INTENT diterima)\n"
+         "  --blackbox F rekam blackbox 100 Hz ke F (format .lbb)\n"
          "  --fast       jalankan secepat mungkin (tanpa jeda real-time)\n"
          "  --seconds S  berhenti setelah S detik waktu simulasi\n"
          "  --dead B:S   servo bus B slot S mati (tidak menjawab)\n"
@@ -170,6 +176,8 @@ int main(int argc, char** argv) {
         else if (a == "--quiet") g_quiet = true;
         else if (a == "--no-stdin") useStdin = false;
         else if (a == "--home-start") randomStart = false;
+        else if (a == "--blackbox" && i + 1 < argc) g_bbFile = fopen(argv[++i], "wb");
+        else if (a == "--gait") g_gaitEnable = true;
         else if (a == "--dead" && i + 1 < argc) {
             int b = 0, s = 0;
             if (sscanf(argv[++i], "%d:%d", &b, &s) == 2 && b >= 0 && b < 2 && s >= 0 && s < la::SERVO_SLOTS)
@@ -186,15 +194,25 @@ int main(int argc, char** argv) {
 
     la::Platform pf{ [](void*) -> int64_t { return g_now; }, logLine, nullptr };
     int16_t trim[2][la::SERVO_SLOTS] = {};
-    g_ctrl.init(pf, la::runtimeConfigDefault(), trim, la::Controller::Options{});
+    la::RuntimeConfig cfg0 = la::runtimeConfigDefault();
+    cfg0.gaitEnable = g_gaitEnable;
+    g_ctrl.init(pf, cfg0, trim, la::Controller::Options{});
+    if (g_bbFile) {
+        uint8_t hdr[16]; la::blackboxHeader(hdr, (uint32_t)(g_now / 1000));
+        fwrite(hdr, 1, 16, g_bbFile);
+        g_ctrl.setBlackbox(&g_bb);
+    }
 
     la::lap::Hello self;
     self.role = la::lap::ROLE_SIM; self.board = la::lap::BOARD_SIM;
     self.fwMajor = la::CORE_VER_MAJOR; self.fwMinor = la::CORE_VER_MINOR; self.fwPatch = la::CORE_VER_PATCH;
-    self.caps = la::lap::CAP_SIM;
+    self.caps = la::lap::CAP_SIM | la::lap::CAP_MOTION | la::lap::CAP_GAIT_INTENT | (g_bbFile ? (uint32_t)la::lap::CAP_SD : 0u);
     strncpy(self.name, "leumpang-sim", 16);
     la::lap::LapEndpoint::Host h;
     h.write = epWrite; h.submit = epSubmit; h.snapshot = epSnapshot; h.simHook = epSim;
+    h.motions = &g_ctrl.motions();
+    h.motionSaved = [](void*, int slot, const uint8_t*, size_t n) {
+        printf("[sim] motion slot %d diunggah (%zu B)\n", slot, n); fflush(stdout); };
 
     const int lsock = listenOn(port);
     if (useStdin) fcntl(0, F_SETFL, fcntl(0, F_GETFL) | O_NONBLOCK);
@@ -214,6 +232,10 @@ int main(int argc, char** argv) {
         g_now = cycleStart;
         g_ctrl.step(imuSample(), g_servo, g_inbox);
         g_servo.physics();
+        if (g_bbFile) {
+            la::BlackboxRecord r; uint8_t rec[la::BLACKBOX_REC_SIZE];
+            while (g_bb.pop(r)) { r.encode(rec); fwrite(rec, 1, sizeof(rec), g_bbFile); }
+        }
         cycleStart += (int64_t)la::CONTROL_PERIOD_MS * 1000;
         if (seconds > 0 && (cycleStart - simStart) >= (int64_t)(seconds * 1e6)) break;
 
@@ -248,6 +270,7 @@ int main(int argc, char** argv) {
     }
     if (g_client >= 0) close(g_client);
     close(lsock);
+    if (g_bbFile) fclose(g_bbFile);
     la::Telemetry t; g_ctrl.snapshot(t);
     printf("leumpang_sim selesai: mode=%s overruns=%u\n", la::modeName(t.mode), (unsigned)t.loopOverruns);
     return 0;

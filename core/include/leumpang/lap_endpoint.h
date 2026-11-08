@@ -10,6 +10,7 @@
 // =============================================================================
 #pragma once
 #include "leumpang/lap.h"
+#include "leumpang/motion.h"
 
 namespace la {
 namespace lap {
@@ -19,10 +20,13 @@ public:
     struct Host {
         void* ctx = nullptr;
         void     (*write)(void* ctx, const uint8_t* d, size_t n) = nullptr;
+        void*    writeCtx = nullptr;                                       // nullptr = pakai ctx
         bool     (*submit)(void* ctx, const Command& c) = nullptr;       // false = antrean penuh
         void     (*snapshot)(void* ctx, Telemetry& t) = nullptr;
         uint32_t (*savedGen)(void* ctx) = nullptr;                        // boleh nullptr
         bool     (*simHook)(void* ctx, const Packet& p) = nullptr;        // SIM_*; nullptr = tidak didukung
+        MotionStore* motions = nullptr;                                    // nullptr = MOTION_* UNSUPPORTED
+        void     (*motionSaved)(void* ctx, int slot, const uint8_t* d, size_t n) = nullptr;  // simpan ke SD
     };
     static constexpr uint32_t LINK_TIMEOUT_MS = 3000;
 
@@ -31,6 +35,7 @@ public:
     void poll(uint32_t nowMs);              // panggil >= 50 Hz
     void sendLog(const char* line);         // kirim LOG bila link aktif & logOn
     bool linkActive() const { return active_; }
+    bool rxRecent(uint32_t nowMs) const { return dec_.frames && nowMs - lastRxMs_ <= LINK_TIMEOUT_MS; }
     const Decoder& decoder() const { return dec_; }
 
 private:
@@ -42,6 +47,7 @@ private:
     void sendPacket(const Packet& p);
     void ack(const Packet& p, uint8_t status);
     void sendConfig();
+    void sendMotionStatus();
 
     Host         h_{};
     Hello        self_{};
@@ -51,6 +57,10 @@ private:
     uint8_t      seq_ = 0;
     uint32_t     lastRxMs_ = 0, lastTele_ = 0, lastServo_ = 0, lastGait_ = 0, lastCfgGen_ = 0xFFFFFFFF;
     Telemetry    snap_{};
+    // unggah motion
+    int          upSlot_ = -1;
+    size_t       upTotal_ = 0, upGot_ = 0;
+    uint8_t      upBuf_[MOTION_MAX_BYTES];
 };
 
 }  // namespace lap

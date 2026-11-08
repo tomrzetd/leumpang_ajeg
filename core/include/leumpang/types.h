@@ -9,7 +9,7 @@
 namespace la {
 
 // ---- Versi ----------------------------------------------------------------
-constexpr uint8_t CORE_VER_MAJOR = 0, CORE_VER_MINOR = 5, CORE_VER_PATCH = 0;
+constexpr uint8_t CORE_VER_MAJOR = 0, CORE_VER_MINOR = 6, CORE_VER_PATCH = 0;
 
 // ---- Servo ICS 3.5 ----------------------------------------------------------
 constexpr uint32_t ICS_BAUD     = 1250000;   // 8E1
@@ -57,11 +57,13 @@ constexpr float kRad2Deg = 57.2957795f;
 enum class Mode : uint16_t {
     RAW_ANGLES = 700, FALLEN = 705, RESET = 710, READY = 720, BALANCE = 730,
     WALK_INIT = 740, WALK_HOLD = 750, WALK_STEP = 760, WALK_END = 770,
-    POSE_HOLD = 780, ANGLE_DISP = 790, MIRROR_DBG = 791
+    POSE_HOLD = 780, ANGLE_DISP = 790, MIRROR_DBG = 791,
+    WALK_CONT = 800,      // Fase 1: langkah berulang atas GAIT_INTENT (EKSPERIMENTAL)
+    MOTION_PLAY = 810     // Fase 1: memutar template gerak
 };
 const char* modeName(Mode m);
 const char* modeShortName(Mode m);
-bool modeIsGait(Mode m);              // WALK_INIT..WALK_END
+bool modeIsGait(Mode m);              // WALK_INIT..WALK_END, WALK_CONT
 bool modePersistSafe(Mode m);         // aman menulis flash/SD besar (robot diam / servo free)
 
 // ---- Runtime config (persisten) ------------------------------------------
@@ -78,6 +80,10 @@ struct RuntimeConfig {
     int8_t   imuRollSign;
     int8_t   imuPitchSign;
     bool     imuSwap;
+    // ---- Fase 1: gait kontinu ----
+    bool     gaitEnable;        // default false: GAIT_INTENT ditolak
+    float    gaitStepMax;       // mm per langkah (|vx|)
+    float    gaitYawMaxRad;     // rad per langkah
 };
 RuntimeConfig runtimeConfigDefault();
 void runtimeConfigSanitize(RuntimeConfig& c);
@@ -89,17 +95,20 @@ struct ServoPositions {
 };
 
 // ---- Perintah -------------------------------------------------------------
-enum class CmdType : uint8_t { RESET, GO, STOP, CALIBRATE, SET_PARAM, SET_TRIM };
+enum class CmdType : uint8_t { RESET, GO, STOP, CALIBRATE, SET_PARAM, SET_TRIM,
+                               GAIT_INTENT, MOTION_PLAY, MOTION_STOP };
 enum class ParamId : uint8_t {
     FALL_DEG, REARM_DEG, IMU_STALE_MS, SERVO_STEP, TRIGGER_ROLL_DEG,
     TRIGGER_PITCH_DEG, FOOT_LIFT, SWAY_BASE, SWAY_GAIN, SIGN_ROLL,
-    SIGN_PITCH, IMU_SWAP, COUNT_
+    SIGN_PITCH, IMU_SWAP, GAIT_ENABLE, GAIT_STEP_MAX, GAIT_YAW_MAX_DEG, COUNT_
 };
 struct Command {
-    CmdType type;
-    ParamId param;
-    uint8_t bus, slot;
-    float   value;
+    CmdType  type;
+    ParamId  param;
+    uint8_t  bus, slot;     // SET_TRIM; slot juga = slot motion untuk MOTION_PLAY
+    float    value;         // SET_PARAM / SET_TRIM / GAIT_INTENT vx (mm/langkah)
+    float    vy, yawDeg;    // GAIT_INTENT (vy belum dipakai; yaw = derajat per langkah)
+    uint16_t ttlMs;         // GAIT_INTENT: niat kedaluwarsa setelah ttl
 };
 
 // ---- Masukan IMU per siklus (dari HAL) -------------------------------------
@@ -133,6 +142,12 @@ struct Telemetry {
     uint32_t cfgGen;
     uint32_t loopAvgUs, loopMaxUs, loopOverruns, servoPhaseUs;
     uint32_t ctrlStackFree;   // diisi HAL (0 = tidak diketahui)
+    // Fase 1
+    bool     intentActive;
+    float    intentVx, intentYawDeg;
+    int8_t   motionSlot;      // -1 = tidak memutar
+    uint8_t  motionFrame;
+    uint32_t blackboxDropped;
 };
 
 // ---- Utilitas -------------------------------------------------------------

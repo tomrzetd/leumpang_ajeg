@@ -28,6 +28,8 @@ const char* modeName(Mode m) {
         case Mode::POSE_HOLD:  return "POSE_HOLD";
         case Mode::ANGLE_DISP: return "ANGLE_DISP";
         case Mode::MIRROR_DBG: return "MIRROR_DBG";
+        case Mode::WALK_CONT:  return "WALK_CONT";
+        case Mode::MOTION_PLAY:return "MOTION_PLAY";
     }
     return "UNKNOWN";
 }
@@ -45,11 +47,14 @@ const char* modeShortName(Mode m) {
         case Mode::POSE_HOLD:  return "POSE HOLD";
         case Mode::ANGLE_DISP: return "ANGLE";
         case Mode::MIRROR_DBG: return "MIRROR";
+        case Mode::WALK_CONT:  return "WALK CONT";
+        case Mode::MOTION_PLAY:return "MOTION";
     }
     return "UNKNOWN";
 }
 bool modeIsGait(Mode m) {
-    return m == Mode::WALK_INIT || m == Mode::WALK_HOLD || m == Mode::WALK_STEP || m == Mode::WALK_END;
+    return m == Mode::WALK_INIT || m == Mode::WALK_HOLD || m == Mode::WALK_STEP || m == Mode::WALK_END ||
+           m == Mode::WALK_CONT;
 }
 bool modePersistSafe(Mode m) {
     return m == Mode::READY || m == Mode::FALLEN || m == Mode::ANGLE_DISP || m == Mode::RAW_ANGLES;
@@ -62,6 +67,7 @@ RuntimeConfig runtimeConfigDefault() {
     c.triggerRollRad = 0.033f; c.triggerPitchRad = 0.044f;
     c.footLiftMax = 35.0f; c.swayBase = 17.0f; c.swayGain = 17.0f;
     c.imuRollSign = +1; c.imuPitchSign = +1; c.imuSwap = false;
+    c.gaitEnable = false; c.gaitStepMax = 10.0f; c.gaitYawMaxRad = 5.0f / kRad2Deg;
     return c;
 }
 
@@ -81,6 +87,9 @@ void runtimeConfigSanitize(RuntimeConfig& c) {
     c.imuPitchSign    = (c.imuPitchSign < 0) ? -1 : +1;
     c.imuSwap         = c.imuSwap ? true : false;
     if (c.rearmAngleRad >= c.fallAngleRad) c.rearmAngleRad = 0.5f * c.fallAngleRad;
+    c.gaitEnable      = c.gaitEnable ? true : false;
+    c.gaitStepMax     = clampf(fin(c.gaitStepMax, d.gaitStepMax), 0.0f, 25.0f);
+    c.gaitYawMaxRad   = clampf(fin(c.gaitYawMaxRad, d.gaitYawMaxRad), 0.0f, 15.0f / kRad2Deg);
 }
 
 static inline int16_t f2i16(float v, int16_t fallback = 0) {
@@ -324,16 +333,21 @@ void Controller::imuCalRestart() { cal_.done = false; offRoll_ = offPitch_ = 0; 
 // ============================================================================
 static bool isWalkingMode(Mode m) { return m == Mode::BALANCE || modeIsGait(m); }
 static bool fallCheckMode(Mode m) {
-    return isWalkingMode(m) || m == Mode::READY || m == Mode::POSE_HOLD || m == Mode::MIRROR_DBG;
+    return isWalkingMode(m) || m == Mode::READY || m == Mode::POSE_HOLD || m == Mode::MIRROR_DBG ||
+           m == Mode::MOTION_PLAY;
 }
 
 void Controller::enterFallen(const char* why) {
     if (walk_.mode == Mode::FALLEN) return;
+    if (walk_.mode == Mode::MOTION_PLAY && motSlot_ >= 0) { motions_.release(motSlot_); motSlot_ = -1; mot_ = nullptr; }
+    gaitOfsActive_ = false; intentDeadlineUs_ = 0;
     walk_.mode = Mode::FALLEN;
     walk_.fallCt = 0; walk_.uprightCt = 0; freeTick_ = 0;
     logf("\r\n!!! %s - SERVO FREE. Tegakkan robot lalu tekan 'r'.\r\n", why);
 }
 void Controller::startReset(const char* why, int16_t cycles) {
+    if (walk_.mode == Mode::MOTION_PLAY && motSlot_ >= 0) { motions_.release(motSlot_); motSlot_ = -1; mot_ = nullptr; }
+    gaitOfsActive_ = false; intentDeadlineUs_ = 0;
     walk_.motCt = cycles;
     walk_.mode  = Mode::RESET;
     logf("RESET: %s\r\n", why);
@@ -496,6 +510,17 @@ void Controller::feetCont1(float x0, float y0, float x1, float y1, int s) {
 }
 void Controller::feetCont2(int s) {
     const WalkingState& w = walk_;
+    if (gaitOfsActive_) {                       // hanya WALK_CONT; mode lain identik V4
+        if (w.jikuasi == 0)
+            feetCont1(w.dxi - w.swx + gx_, w.dyi - w.swy, w.dxis - w.swx + gxs_, w.dyis + w.swy, s);
+        else
+            feetCont1(w.dxis - w.swx + gxs_, w.dyis + w.swy, w.dxi - w.swx + gx_, w.dyi - w.swy, s);
+        // yaw: kaki tumpu +gyaw/2 -> -gyaw/2, kaki ayun sebaliknya (hitungan servo hip-yaw)
+        const int sup = (w.jikuasi == 0) ? 0 : 1, swg = 1 - sup;
+        servos_.K2[sup] = f2i16((float)servos_.K2[sup] + gyaw_ * CHG_SVA, servos_.K2[sup]);
+        servos_.K2[swg] = f2i16((float)servos_.K2[swg] - gyaw_ * CHG_SVA, servos_.K2[swg]);
+        return;
+    }
     if (w.jikuasi == 0)
         feetCont1(w.dxi - w.swx, w.dyi - w.swy, w.dxis - w.swx, w.dyis + w.swy, s);
     else
@@ -590,6 +615,8 @@ void Controller::walkControl() {
             if (++dispDiv_ >= 5) { dispDiv_ = 0;
                 logf("R:%d P:%d (x1000 rad)\r\n", (int)(roll_ * 1000.0f), (int)(pitch_ * 1000.0f)); }
             break;
+        case Mode::WALK_CONT:   walkContStep(); break;
+        case Mode::MOTION_PLAY: motionStep();   break;
         case Mode::FALLEN:
             if (opt_.autoRearm) {
                 if (imuFresh() && fabsf(roll_) < cfg_.rearmAngleRad && fabsf(pitch_) < cfg_.rearmAngleRad) {
@@ -629,6 +656,9 @@ void Controller::applyRuntimeParam(ParamId id, float v) {
         case ParamId::SIGN_ROLL:         c.imuRollSign = (v < 0) ? -1 : +1; break;
         case ParamId::SIGN_PITCH:        c.imuPitchSign = (v < 0) ? -1 : +1; break;
         case ParamId::IMU_SWAP:          c.imuSwap = v >= 0.5f; break;
+        case ParamId::GAIT_ENABLE:       c.gaitEnable = v >= 0.5f; break;
+        case ParamId::GAIT_STEP_MAX:     c.gaitStepMax = v; break;
+        case ParamId::GAIT_YAW_MAX_DEG:  c.gaitYawMaxRad = v / kRad2Deg; break;
         case ParamId::COUNT_:            return;
     }
     runtimeConfigSanitize(c);
@@ -736,6 +766,11 @@ void Controller::handleCommand(const Command& c) {
             break;
         case CmdType::SET_PARAM: applyRuntimeParam(c.param, c.value); break;
         case CmdType::SET_TRIM:  setTrim(c.bus, c.slot, (int32_t)lroundf(clampf(c.value, -30000.0f, 30000.0f))); break;
+        case CmdType::GAIT_INTENT: gaitIntent(c); break;
+        case CmdType::MOTION_PLAY: motionStart(c.slot); break;
+        case CmdType::MOTION_STOP:
+            if (walk_.mode == Mode::MOTION_PLAY) motionEnd(false, "dihentikan");
+            break;
     }
 }
 
@@ -776,6 +811,7 @@ void Controller::step(const ImuInput& imuIn, ServoBus& bus, Inbox& inbox) {
     const uint32_t dt = (uint32_t)(now() - t0);
     loopAvgUs_ = (loopAvgUs_ * 15u + dt) / 16u;
     if (dt > loopMaxUs_) loopMaxUs_ = dt;
+    if (bb_) blackboxPush(dt);
 }
 
 void Controller::snapshot(Telemetry& t) const {
@@ -801,6 +837,136 @@ void Controller::snapshot(Telemetry& t) const {
         const int64_t age = fb.lastUs ? (nowUs - fb.lastUs) / 1000 : 65535;
         t.fbAgeMs[b][s] = (uint16_t)(age > 65535 ? 65535 : age);
     }
+    t.intentActive = intentDeadlineUs_ > nowUs;
+    t.intentVx = gaitStride_; t.intentYawDeg = gaitYaw_ * kRad2Deg;
+    t.motionSlot = motSlot_; t.motionFrame = motFrame_;
+    t.blackboxDropped = bb_ ? bb_->dropped() : 0;
+}
+
+// ============================================================================
+//  Fase 1: gait kontinu (EKSPERIMENTAL - validasi di robot tergantung + twin dulu)
+//  Langkah UVC berulang (mekanik WALK_INIT) + offset langkah depan & yaw:
+//    kaki tumpu x: +S/2 -> -S/2, kaki ayun x: -S/2 -> +S/2 selama satu langkah.
+//  S dan yaw hanya berubah di batas langkah, maks 3 mm / 1 deg per langkah.
+// ============================================================================
+void Controller::gaitIntent(const Command& c) {
+    const uint32_t ms = (uint32_t)(now() / 1000);
+    if (!cfg_.gaitEnable) {
+        if (ms - lastGaitRejectMs_ > 2000) { lastGaitRejectMs_ = ms; logf("GAIT_INTENT ditolak: gaitEnable=0\r\n"); }
+        return;
+    }
+    if (walk_.mode != Mode::BALANCE && walk_.mode != Mode::WALK_CONT) {
+        if (ms - lastGaitRejectMs_ > 2000) { lastGaitRejectMs_ = ms; logf("GAIT_INTENT ditolak: hanya dari BALANCE/WALK_CONT\r\n"); }
+        return;
+    }
+    if (!isFiniteVal(c.value) || !isFiniteVal(c.yawDeg)) return;
+    gaitTgtStride_ = clampf(c.value, -cfg_.gaitStepMax, cfg_.gaitStepMax);
+    gaitTgtYaw_    = clampf(c.yawDeg / kRad2Deg, -cfg_.gaitYawMaxRad, cfg_.gaitYawMaxRad);
+    intentDeadlineUs_ = now() + (int64_t)clampi(c.ttlMs, 0, 1000) * 1000;
+    if (walk_.mode == Mode::BALANCE && c.ttlMs > 0) {
+        initWalkState();
+        walk_.jikuasi = (roll_ > 0) ? 1 : 0;
+        walk_.fwct = 1;
+        gaitStride_ = gaitYaw_ = 0; gx_ = gxs_ = gyaw_ = 0;
+        gaitOfsActive_ = true;
+        walk_.mode = Mode::WALK_CONT;
+        logf("mode=800 [Walk Cont] vx=%.1f yaw=%.1f\r\n", (double)gaitTgtStride_, (double)(gaitTgtYaw_ * kRad2Deg));
+    }
+}
+
+void Controller::gaitOffsets() {
+    const float t = clampf(walk_.fwct / fmaxf(walk_.fwctEnd, 1.0f), 0.0f, 1.0f);
+    gx_   = gaitStride_ * (0.5f - t);
+    gxs_  = gaitStride_ * (t - 0.5f);
+    gyaw_ = gaitYaw_ * (0.5f - t);
+}
+
+void Controller::walkContStep() {
+    WalkingState& w = walk_;
+    const bool expired = now() >= intentDeadlineUs_;
+    if (expired) { gaitTgtStride_ = 0; gaitTgtYaw_ = 0; }
+    uvc(); uvcSub(); footUp();
+    gaitOffsets();
+    feetCont2(1); armCont(); counterCont();
+    if (w.fwct == 0) {                                   // batas langkah
+        gaitStride_ += clampf(gaitTgtStride_ - gaitStride_, -3.0f, 3.0f);
+        gaitYaw_    += clampf(gaitTgtYaw_ - gaitYaw_, -1.0f / kRad2Deg, 1.0f / kRad2Deg);
+        if (expired && fabsf(gaitStride_) < 0.01f && fabsf(gaitYaw_) < 1e-4f) {
+            gaitOfsActive_ = false; gx_ = gxs_ = gyaw_ = 0;
+            w.landF = w.landB = 0;
+            w.dxi = w.dyi = w.dxis = w.dyis = w.dxib = w.dyib = 0;
+            w.fwctEnd = 18; w.walkCt = 0; w.fwctUp = 1; w.fwct = 1;
+            w.autoH = HEIGHT; w.sw = w.swx = w.swy = 0; w.jikuasi = 1;
+            w.mode = Mode::WALK_END;
+            logf("mode=770 (niat berakhir)\r\n");
+        }
+    }
+}
+
+// ============================================================================
+//  Fase 1: motion player
+// ============================================================================
+void Controller::motionStart(int slot) {
+    if (walk_.mode != Mode::READY) { logf("MOTION_PLAY ditolak: hanya dari READY\r\n"); return; }
+    const Motion* m = motions_.acquire(slot);
+    if (!m) { logf("MOTION_PLAY ditolak: slot %d kosong/sibuk\r\n", slot); return; }
+    for (int i = 0; i < m->nFrames; ++i)
+        for (uint8_t b = 0; b < 2; ++b) for (uint8_t s = 0; s < SERVO_SLOTS; ++s) {
+            const JointDef& j = JOINTS[b][s];
+            const int32_t raw = (int32_t)j.center + (int32_t)j.sign * ((int32_t)m->f[i].joint[b][s] + trim_[b][s]);
+            if (raw < j.lo || raw > j.hi) {
+                logf("MOTION_PLAY ditolak: frame %d %s di luar batas (%ld)\r\n", i, JOINT_NAMES[b][s], (long)raw);
+                motions_.release(slot);
+                return;
+            }
+        }
+    mot_ = m; motSlot_ = (int8_t)slot; motFrame_ = 0; motFrameStartUs_ = now();
+    for (uint8_t b = 0; b < 2; ++b) for (uint8_t s = 0; s < SERVO_SLOTS; ++s) motPrev_[b][s] = *jointSrc(b, s);
+    walk_.mode = Mode::MOTION_PLAY;
+    logf("mode=810 [Motion] slot %d '%s' %u frame\r\n", slot, m->name, (unsigned)m->nFrames);
+}
+
+void Controller::motionStep() {
+    if (!mot_) { walk_.mode = Mode::READY; return; }
+    const MotionFrame& f = mot_->f[motFrame_];
+    const float t = clampf((float)(now() - motFrameStartUs_) / (1000.0f * (float)f.durMs), 0.0f, 1.0f);
+    float a = t;
+    if (f.interp == MI_COSINE) a = 0.5f * (1.0f - cosf(kPi * t));
+    else if (f.interp == MI_STEP) a = 1.0f;
+    for (uint8_t b = 0; b < 2; ++b) for (uint8_t s = 0; s < SERVO_SLOTS; ++s) {
+        const float v = (float)motPrev_[b][s] + ((float)f.joint[b][s] - (float)motPrev_[b][s]) * a;
+        *jointSrc(b, s) = f2i16(v, *jointSrc(b, s));
+    }
+    if (t >= 1.0f) {
+        memcpy(motPrev_, f.joint, sizeof(motPrev_));
+        motFrameStartUs_ = now();
+        if (++motFrame_ >= mot_->nFrames) motionEnd((mot_->flags & MF_RETURN_HOME) != 0, "selesai");
+    }
+}
+
+void Controller::motionEnd(bool returnHome, const char* why) {
+    if (motSlot_ >= 0) motions_.release(motSlot_);
+    logf("Motion %s (slot %d)\r\n", why, motSlot_);
+    mot_ = nullptr; motSlot_ = -1; motFrame_ = 0;
+    walk_.mode = Mode::READY;
+    if (returnHome) startReset("motion selesai -> HOME");
+}
+
+void Controller::blackboxPush(uint32_t loopUs) {
+    BlackboxRecord r;
+    r.ms = (uint32_t)(now() / 1000);
+    r.mode = (uint16_t)walk_.mode;
+    r.rollCdeg  = (int16_t)clampf(roll_ * kRad2Deg * 100.0f, -32000.0f, 32000.0f);
+    r.pitchCdeg = (int16_t)clampf(pitch_ * kRad2Deg * 100.0f, -32000.0f, 32000.0f);
+    r.loopUs = (uint16_t)clampi((int32_t)loopUs, 0, 65535);
+    memcpy(r.cmd, lastOut_, sizeof(r.cmd));
+    r.fbValidBits = 0;
+    for (uint8_t b = 0; b < 2; ++b) for (uint8_t s = 0; s < SERVO_SLOTS; ++s)
+        if (fb_[b][s].valid) r.fbValidBits |= 1u << (b * SERVO_SLOTS + s);
+    r.flags = (uint8_t)((imuFresh() ? 1 : 0) | (walk_.jikuasi ? 2 : 0) | (intentDeadlineUs_ > now() ? 4 : 0));
+    r.fwct = (uint8_t)clampf(walk_.fwct, 0.0f, 255.0f);
+    r.autoHx10 = (uint16_t)clampf(walk_.autoH * 10.0f, 0.0f, 65535.0f);
+    bb_->push(r);
 }
 
 }  // namespace la

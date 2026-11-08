@@ -1,5 +1,7 @@
 #include "leumpang/lap_endpoint.h"
 
+#include <stdio.h>
+
 namespace la {
 namespace lap {
 
@@ -12,7 +14,7 @@ void LapEndpoint::init(const Host& h, const Hello& self) {
 void LapEndpoint::sendPacket(const Packet& p) {
     uint8_t f[MAX_FRAME];
     const size_t n = encodeFrame(p, f, sizeof(f));
-    if (n && h_.write) h_.write(h_.ctx, f, n);
+    if (n && h_.write) h_.write(h_.writeCtx ? h_.writeCtx : h_.ctx, f, n);
 }
 
 void LapEndpoint::ack(const Packet& p, uint8_t status) {
@@ -27,6 +29,20 @@ void LapEndpoint::sendConfig() {
     fillConfig(snap_.cfg, snap_.cfgGen, h_.savedGen ? h_.savedGen(h_.ctx) : snap_.cfgGen, c);
     send(CONFIG, c);
     lastCfgGen_ = snap_.cfgGen;
+}
+
+void LapEndpoint::sendMotionStatus() {
+    if (!h_.motions) return;
+    MotionStatusMsg m;
+    for (int i = 0; i < MOTION_SLOTS && i < 4; ++i) {
+        m.state[i] = (uint8_t)h_.motions->state(i);
+        if (m.state[i] == MotionStore::READY || m.state[i] == MotionStore::PLAYING) {
+            const Motion* mo = h_.motions->writable(i);          // baca header saja (stabil saat READY/PLAYING)
+            m.nFrames[i] = mo->nFrames;
+            memcpy(m.name[i], mo->name, 16);
+        }
+    }
+    send(MOTION_STATUS, m);
 }
 
 void LapEndpoint::onBytes(const uint8_t* d, size_t n, uint32_t nowMs) {
@@ -77,6 +93,7 @@ void LapEndpoint::handle(const Packet& p, uint32_t nowMs) {
                 case CMD_CAL:   c.type = CmdType::CALIBRATE; break;
                 case CMD_GET_CONFIG: ack(p, OK); sendConfig(); return;
                 case CMD_HELLO: send(HELLO, self_); ack(p, OK); return;
+                case CMD_MOTION_LIST: ack(p, h_.motions ? OK : UNSUPPORTED); sendMotionStatus(); return;
                 default: ack(p, BAD_VALUE); return;
             }
             submit(c);
@@ -98,12 +115,73 @@ void LapEndpoint::handle(const Packet& p, uint32_t nowMs) {
             submit(c);
             return;
         }
+        case GAIT_INTENT: {
+            GaitIntentMsg m;
+            if (!parsePacket(p, m)) { ack(p, BAD_LEN); return; }
+            if (!isFiniteVal(m.vx) || !isFiniteVal(m.yawDeg)) { ack(p, BAD_VALUE); return; }
+            if (h_.snapshot) {
+                h_.snapshot(h_.ctx, snap_);
+                if (!snap_.cfg.gaitEnable || (snap_.mode != Mode::BALANCE && snap_.mode != Mode::WALK_CONT)) {
+                    ack(p, REJECTED_STATE); return;
+                }
+            }
+            Command c{}; c.type = CmdType::GAIT_INTENT; c.value = m.vx; c.vy = m.vy; c.yawDeg = m.yawDeg;
+            c.ttlMs = (uint16_t)clampi(m.ttlMs, 0, 1000);
+            submit(c);
+            return;
+        }
+        case MOTION_BEGIN: {
+            MotionBeginMsg m;
+            if (!h_.motions) { ack(p, UNSUPPORTED); return; }
+            if (!parsePacket(p, m) ) { ack(p, BAD_LEN); return; }
+            if (!MotionStore::validSlot(m.slot) || m.total < MOTION_HDR_BYTES + 2 || m.total > MOTION_MAX_BYTES) { ack(p, BAD_VALUE); return; }
+            if (upSlot_ >= 0 && upSlot_ != m.slot) h_.motions->commit(upSlot_, false);   // batalkan unggahan lama
+            if (!(upSlot_ == m.slot) && !h_.motions->beginWrite(m.slot)) { ack(p, REJECTED_STATE); upSlot_ = -1; return; }
+            upSlot_ = m.slot; upTotal_ = m.total; upGot_ = 0;
+            ack(p, OK);
+            return;
+        }
+        case MOTION_CHUNK: {
+            if (!h_.motions) { ack(p, UNSUPPORTED); return; }
+            Reader r(p.body, p.len);
+            const uint8_t slot = r.u8(); const uint16_t off = r.u16();
+            const size_t n = r.remaining();
+            if (!r.ok() || (int)slot != upSlot_ || off != upGot_ || upGot_ + n > upTotal_) { ack(p, BAD_VALUE); return; }
+            memcpy(upBuf_ + upGot_, p.body + 3, n);
+            upGot_ += n;
+            ack(p, OK);
+            return;
+        }
+        case MOTION_END: {
+            MotionEndMsg m;
+            if (!h_.motions) { ack(p, UNSUPPORTED); return; }
+            if (!parsePacket(p, m) || (int)m.slot != upSlot_ || upGot_ != upTotal_) { ack(p, BAD_VALUE); return; }
+            const MotionError e = motionDecode(upBuf_, upGot_, *h_.motions->writable(upSlot_));
+            h_.motions->commit(upSlot_, e == MotionError::OK);
+            if (e == MotionError::OK && m.save && h_.motionSaved) h_.motionSaved(h_.ctx, upSlot_, upBuf_, upGot_);
+            if (e != MotionError::OK) {
+                char line[64]; snprintf(line, sizeof(line), "Motion ditolak: %s\r\n", motionErrorName(e));
+                sendLog(line);
+            }
+            upSlot_ = -1;
+            ack(p, e == MotionError::OK ? OK : BAD_VALUE);
+            sendMotionStatus();
+            return;
+        }
+        case MOTION_PLAY: {
+            MotionPlayMsg m;
+            if (!h_.motions) { ack(p, UNSUPPORTED); return; }
+            if (!parsePacket(p, m) || !MotionStore::validSlot(m.slot)) { ack(p, BAD_VALUE); return; }
+            Command c{}; c.type = m.play ? CmdType::MOTION_PLAY : CmdType::MOTION_STOP; c.slot = m.slot;
+            submit(c);
+            return;
+        }
         case SIM_IMU: case SIM_FAULT:
             ack(p, (h_.simHook && h_.simHook(h_.ctx, p)) ? OK : UNSUPPORTED);
             return;
         case PONG: case ACK:
             return;
-        default:   // GAIT_INTENT, PERCEPTION, MOTION_*: Fase 1
+        default:   // PERCEPTION: Fase 3
             ack(p, UNSUPPORTED);
             return;
     }

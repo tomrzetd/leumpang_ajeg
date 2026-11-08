@@ -19,7 +19,7 @@ HELLO, PING, PONG, ACK = 0x01, 0x02, 0x03, 0x04
 TELEMETRY, SERVO_STATE, GAIT_STATE, CONFIG, LOG = 0x10, 0x11, 0x12, 0x13, 0x14
 CMD, SET_PARAM, SET_TRIM, STREAM_CFG = 0x20, 0x21, 0x22, 0x23
 GAIT_INTENT, PERCEPTION = 0x30, 0x31
-MOTION_BEGIN, MOTION_CHUNK, MOTION_END, MOTION_PLAY = 0x40, 0x41, 0x42, 0x43
+MOTION_BEGIN, MOTION_CHUNK, MOTION_END, MOTION_PLAY, MOTION_STATUS = 0x40, 0x41, 0x42, 0x43, 0x44
 SIM_IMU, SIM_FAULT = 0x70, 0x71
 
 TYPE_NAMES = {v: k for k, v in dict(globals()).items() if k.isupper() and isinstance(v, int) and 0 < v < 0x80
@@ -28,18 +28,20 @@ TYPE_NAMES = {v: k for k, v in dict(globals()).items() if k.isupper() and isinst
 ACK_STATUS = {0: "OK", 1: "BAD_LEN", 2: "UNSUPPORTED", 3: "REJECTED_STATE", 4: "BUSY", 5: "BAD_VALUE"}
 ROLE_ROBOT, ROLE_PHONE, ROLE_DESKTOP, ROLE_SIM, ROLE_TOOL = range(5)
 BOARDS = {0: "unknown", 1: "esp32s3", 2: "esp32p4", 3: "stm32h562", 4: "sim"}
-CMD_RESET, CMD_GO, CMD_STOP, CMD_CAL, CMD_GET_CONFIG, CMD_HELLO = range(6)
-CMD_NAMES = {"reset": CMD_RESET, "go": CMD_GO, "stop": CMD_STOP, "cal": CMD_CAL, "config": CMD_GET_CONFIG}
+CMD_RESET, CMD_GO, CMD_STOP, CMD_CAL, CMD_GET_CONFIG, CMD_HELLO, CMD_MOTION_LIST = range(7)
+CMD_NAMES = {"reset": CMD_RESET, "go": CMD_GO, "stop": CMD_STOP, "cal": CMD_CAL, "config": CMD_GET_CONFIG,
+             "motions": CMD_MOTION_LIST}
 
 # urutan = enum la::ParamId
 PARAMS = ["fallDeg", "rearmDeg", "imuStaleMs", "servoStep", "trigRollDeg", "trigPitchDeg",
-          "footLift", "swayBase", "swayGain", "rollSign", "pitchSign", "imuSwap"]
+          "footLift", "swayBase", "swayGain", "rollSign", "pitchSign", "imuSwap",
+          "gaitEnable", "gaitStepMax", "gaitYawMaxDeg"]
 
-TF_IMU_FRESH, TF_IMU_INIT, TF_CAL_DONE, TF_PERSIST_PENDING, TF_JIKU_LEFT = 1, 2, 4, 8, 16
+TF_IMU_FRESH, TF_IMU_INIT, TF_CAL_DONE, TF_PERSIST_PENDING, TF_JIKU_LEFT, TF_INTENT_ACTIVE = 1, 2, 4, 8, 16, 32
 
 MODES = {700: "RAW_ANGLES", 705: "FALLEN", 710: "RESET", 720: "READY", 730: "BALANCE", 740: "WALK_INIT",
          750: "WALK_HOLD", 760: "WALK_STEP", 770: "WALK_END", 780: "POSE_HOLD", 790: "ANGLE_DISP",
-         791: "MIRROR_DBG"}
+         791: "MIRROR_DBG", 800: "WALK_CONT", 810: "MOTION_PLAY"}
 
 JOINT_NAMES = [
     ["WAIST", "R SHOULDER P", "R SHOULDER R", "R SHOULDER Y", "R ELBOW", "R HIP Y", "R HIP R",
@@ -293,8 +295,96 @@ def pk_stream_cfg(tele_hz=20, servo_hz=5, gait_hz=0, log_on=1) -> bytes:
     return struct.pack("<BBBB", tele_hz, servo_hz, gait_hz, log_on)
 
 
-def pk_gait_intent(vx: float, vy: float, yaw_rate: float, ttl_ms: int) -> bytes:
-    return struct.pack("<fffH", vx, vy, yaw_rate, ttl_ms)
+def pk_gait_intent(vx: float, vy: float, yaw_deg: float, ttl_ms: int) -> bytes:
+    """vx mm/langkah, yaw derajat/langkah, ttl <= 1000 ms (kirim ulang sebelum habis)."""
+    return struct.pack("<fffH", vx, vy, yaw_deg, ttl_ms)
+
+
+def pk_motion_begin(slot: int, total: int) -> bytes:
+    return struct.pack("<BH", slot, total)
+
+
+def pk_motion_chunk(slot: int, offset: int, data: bytes) -> bytes:
+    return struct.pack("<BH", slot, offset) + data
+
+
+def pk_motion_end(slot: int, save: bool = True) -> bytes:
+    return struct.pack("<BB", slot, 1 if save else 0)
+
+
+def pk_motion_play(slot: int, play: bool = True) -> bytes:
+    return struct.pack("<BB", slot, 1 if play else 0)
+
+
+# ---------------------------------------------------------------------------
+#  Template gerak LAM1 (lihat core/include/leumpang/motion.h)
+# ---------------------------------------------------------------------------
+MOTION_MAGIC = 0x314D414C
+MF_RETURN_HOME = 1
+MI_COSINE, MI_LINEAR, MI_STEP = 0, 1, 2
+MOTION_STATES = {0: "EMPTY", 1: "WRITING", 2: "READY", 3: "PLAYING"}
+
+
+@dataclass
+class MotionFrame:
+    dur_ms: int
+    joints: List[List[int]]          # [2][11] offset servo (ruang kin/src)
+    interp: int = MI_COSINE
+
+
+def encode_motion(name: str, frames: List[MotionFrame], flags: int = 0) -> bytes:
+    if not 1 <= len(frames) <= 64:
+        raise ValueError("1..64 frame")
+    b = struct.pack("<IBBH16s", MOTION_MAGIC, 1, len(frames), flags, name.encode()[:16])
+    for f in frames:
+        b += struct.pack("<HBB", f.dur_ms, f.interp, 0)
+        b += struct.pack("<22h", *(f.joints[0] + f.joints[1]))
+    return b + struct.pack("<H", crc16(b))
+
+
+def decode_motion(b: bytes):
+    magic, ver, n, flags, name = struct.unpack_from("<IBBH16s", b)
+    if magic != MOTION_MAGIC or ver != 1 or crc16(b[:-2]) != struct.unpack("<H", b[-2:])[0]:
+        raise ValueError("bukan LAM1 valid")
+    frames, off = [], 24
+    for _ in range(n):
+        dur, interp, _r = struct.unpack_from("<HBB", b, off)
+        j = list(struct.unpack_from("<22h", b, off + 4))
+        frames.append(MotionFrame(dur, [j[:11], j[11:]], interp))
+        off += 48
+    return name.rstrip(b"\0").decode(), frames, flags
+
+
+@dataclass
+class MotionStatus:
+    slots: list
+
+    @classmethod
+    def unpack(cls, b: bytes) -> "MotionStatus":
+        out = []
+        for i in range(4):
+            st, nf, nm = struct.unpack_from("<BB16s", b, i * 18)
+            out.append((MOTION_STATES.get(st, st), nf, nm.rstrip(b"\0").decode(errors="replace")))
+        return cls(out)
+
+
+# ---------------------------------------------------------------------------
+#  Blackbox .lbb (lihat core/include/leumpang/blackbox.h)
+# ---------------------------------------------------------------------------
+def read_blackbox(path: str):
+    """Generator dict per record 100 Hz."""
+    with open(path, "rb") as fp:
+        hdr = fp.read(16)
+        magic, ver, rec_size, start_ms = struct.unpack_from("<IHHI", hdr)
+        if magic != 0x4242414C:
+            raise ValueError("bukan file blackbox LABB")
+        while True:
+            r = fp.read(rec_size)
+            if len(r) < rec_size:
+                break
+            v = struct.unpack_from("<IHhhH22hIBBH", r)
+            yield {"ms": v[0], "mode": v[1], "roll": v[2] / 100, "pitch": v[3] / 100, "loop_us": v[4],
+                   "cmd": list(v[5:27]), "fb_valid": v[27], "flags": v[28], "fwct": v[29], "auto_h": v[30] / 10}
 
 
 def pk_sim_imu(roll_deg: float, pitch_deg: float, ok: bool = True) -> bytes:
@@ -322,6 +412,8 @@ def parse(p: Packet):
             return Config.unpack(p.body)
         if p.type == LOG:
             return p.body.decode(errors="replace")
+        if p.type == MOTION_STATUS:
+            return MotionStatus.unpack(p.body)
     except struct.error:
         return None
     return p.body
@@ -334,6 +426,7 @@ class Link:
     def __init__(self, tcp: Optional[str] = None, serial_port: Optional[str] = None, baud: int = 115200):
         self.dec = Decoder()
         self.seq = 0
+        self.pending = []
         if tcp:
             import socket
             host, _, port = tcp.partition(":")
@@ -346,6 +439,8 @@ class Link:
             self.sock = None
         else:
             raise ValueError("pilih tcp atau serial")
+        # 0x00 pembuka: di port serial bersama (SerialLink), ini memulai penangkapan frame LAP
+        (self.sock.sendall if self.sock else self.ser.write)(b"\x00")
 
     def send(self, type_: int, body: bytes = b"") -> int:
         seq = self.seq
@@ -371,6 +466,30 @@ class Link:
             self.ser.timeout = timeout
             data = self.ser.read(4096)
         return list(self.dec.feed(data))
+
+    def request(self, type_: int, body: bytes = b"", timeout: float = 1.5):
+        """Kirim lalu tunggu ACK yang cocok. Paket lain disimpan di self.pending."""
+        import time
+        seq = self.send(type_, body)
+        end = time.time() + timeout
+        while time.time() < end:
+            for p in self.recv(0.05):
+                if p.type == ACK:
+                    a = Ack.unpack(p.body)
+                    if a.ack_seq == seq and a.ack_type == type_:
+                        return a
+                self.pending.append(p)
+        return None
+
+    def upload_motion(self, slot: int, blob: bytes, save: bool = True) -> Ack:
+        a = self.request(MOTION_BEGIN, pk_motion_begin(slot, len(blob)))
+        if not a or a.status:
+            return a
+        for off in range(0, len(blob), 200):
+            a = self.request(MOTION_CHUNK, pk_motion_chunk(slot, off, blob[off:off + 200]))
+            if not a or a.status:
+                return a
+        return self.request(MOTION_END, pk_motion_end(slot, save))
 
     def close(self) -> None:
         (self.sock or self.ser).close()

@@ -21,7 +21,8 @@ if(LA_SANITIZE AND NOT MSVC)
   set(LA_SAN -fsanitize=address,undefined -fno-omit-frame-pointer)
 endif()
 
-set(LA_CORE_SRC core/src/controller.cpp core/src/lap.cpp core/src/lap_endpoint.cpp)
+set(LA_CORE_SRC core/src/controller.cpp core/src/lap.cpp core/src/lap_endpoint.cpp
+                core/src/lap_serial.cpp core/src/motion.cpp)
 
 # ---- core ----------------------------------------------------------------
 add_library(leumpang_core STATIC ${LA_CORE_SRC})

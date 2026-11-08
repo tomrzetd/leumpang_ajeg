@@ -29,7 +29,7 @@ def free_port():
 
 def main():
     port = free_port()
-    sim = subprocess.Popen([sys.argv[1], "--port", str(port), "--no-stdin", "--quiet", "--seconds", "30", "--dead", "1:3"],
+    sim = subprocess.Popen([sys.argv[1], "--port", str(port), "--no-stdin", "--quiet", "--seconds", "40", "--dead", "1:3"],
                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     try:
         for _ in range(50):
@@ -104,7 +104,35 @@ def main():
 
         seq = link.send(lap.GAIT_INTENT, lap.pk_gait_intent(10, 0, 0, 500))
         pump(0.5, lambda: seq in state["acks"])
-        check(state["acks"].get(seq) and state["acks"][seq].status_name() == "UNSUPPORTED", "GAIT_INTENT -> UNSUPPORTED (Fase 1)")
+        check(state["acks"].get(seq) and state["acks"][seq].status_name() == "REJECTED_STATE",
+              "GAIT_INTENT saat READY / gaitEnable=0 -> REJECTED_STATE")
+
+        # ---- Fase 1: motion upload + play ----
+        blob = open(os.path.join(os.path.dirname(__file__), "..", "motions", "lambai.lam"), "rb").read()
+        link.pending = []
+        ack = link.upload_motion(1, blob)
+        check(ack is not None and ack.status == 0, f"unggah lambai.lam ({len(blob)} B) via MOTION_BEGIN/CHUNK/END")
+        link.send(lap.MOTION_PLAY, lap.pk_motion_play(1))
+        played = pump(2, lambda: state["tele"].mode == 810)
+        check(played, "MOTION_PLAY -> mode 810")
+        back = pump(6, lambda: state["tele"].mode == 720)
+        check(back, "motion selesai (returnHome) -> RESET -> READY")
+
+        # ---- Fase 1: gait kontinu ----
+        link.send(lap.SET_PARAM, lap.pk_set_param("gaitEnable", 1))
+        link.send(lap.CMD, lap.pk_cmd(lap.CMD_GO))
+        pump(1, lambda: state["tele"].mode == 730)
+        swaps, last_j, t_end = 0, None, time.time() + 2.0
+        while time.time() < t_end:
+            link.send(lap.GAIT_INTENT, lap.pk_gait_intent(6, 0, 1, 400))
+            pump(0.2)
+            j = state["tele"].flags & lap.TF_JIKU_LEFT
+            swaps += 1 if (last_j is not None and j != last_j) else 0
+            last_j = j
+        check(state["tele"].mode == 800 and state["tele"].flags & lap.TF_INTENT_ACTIVE, "GAIT_INTENT berulang -> WALK_CONT (800)")
+        check(swaps >= 4, f"kaki tumpu berganti saat melangkah ({swaps}x terlihat di telemetry 20 Hz)")
+        stopped = pump(4, lambda: state["tele"].mode == 730)
+        check(stopped, "niat berhenti -> kembali BALANCE")
 
         # sampah di stream tidak memutus link
         link.sock.sendall(b"teks acak\x00\x01\x02\x03\x00" + bytes(range(1, 200)) + b"\x00")
