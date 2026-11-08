@@ -281,7 +281,7 @@ int main() {
         out[i * 3 + 0] = (py * lb.scale + lb.padY) / 192.0f; out[i * 3 + 1] = (px * lb.scale + lb.padX) / 192.0f; out[i * 3 + 2] = 0.8f;
     }
     Keypoint dk[KP_COUNT]; decodeMoveNet(out, lb, dk);
-    CHECK(std::fabs(dk[16].x - 420) < 0.01f && std::fabs(dk[16].y - 210) < 0.01f && lb.padY > 0 && lb.padX == 0,
+    CHECK(std::fabs(dk[16].x - 420) < 0.01f && std::fabs(dk[16].y - 210) < 0.01f && lb.padY > 0 && std::fabs(lb.padX) < 1e-3f,
           "letterbox + dekode MoveNet kembali ke koordinat gambar");
 
     // ================= LapClient <-> SimRobot (jalur studio tanpa hardware) =================

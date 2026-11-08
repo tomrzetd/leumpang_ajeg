@@ -129,7 +129,7 @@ private:
     void livePoseStep();
     // ---- util ----
     int64_t now() const { return plat_.nowUs(plat_.ctx); }
-    void logf(const char* fmt, ...) __attribute__((format(printf, 2, 3)));
+    void logf(const char* fmt, ...) LA_PRINTF_FMT(2, 3);
 
     Platform       plat_{};
     Options        opt_{};

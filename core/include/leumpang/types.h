@@ -6,6 +6,13 @@
 #include <stdint.h>
 #include <stddef.h>
 
+// printf-format check (GCC/Clang); kosong di MSVC (studio Windows)
+#if defined(__GNUC__) || defined(__clang__)
+#define LA_PRINTF_FMT(a, b) __attribute__((format(printf, a, b)))
+#else
+#define LA_PRINTF_FMT(a, b)
+#endif
+
 namespace la {
 
 // ---- Versi ----------------------------------------------------------------

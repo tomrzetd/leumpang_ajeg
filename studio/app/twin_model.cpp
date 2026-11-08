@@ -1,4 +1,5 @@
 #include "twin_model.h"
+#include "leumpang/controller.h"
 
 #include <QColor>
 #include <QVariantMap>
@@ -23,7 +24,7 @@ TwinModel::TwinModel(QObject* parent) : QObject(parent) {
         e[QStringLiteral("roughness")] = mat.roughness;
         meshes_ << e;
     }
-    JointSrc home; homeSrc(home);
+    JointSrc home; la::studio::homeSrc(home);
     for (uint8_t b = 0; b < 2; ++b) for (uint8_t s = 0; s < SERVO_SLOTS; ++s) {
         const JointDef& j = JOINTS[b][s];
         const int a = rawToSrc(b, s, j.lo, 0), c = rawToSrc(b, s, j.hi, 0);
