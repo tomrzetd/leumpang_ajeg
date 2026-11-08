@@ -95,9 +95,19 @@ jobs:
           version: '6.8.3'
           modules: 'qtquick3d qtshadertools qtserialport qtmultimedia'
           cache: true
+      - uses: actions/cache@v4
+        with:
+          path: ort
+          key: ort-1.22.0-linux
+      - name: ONNX Runtime (unduh dengan retry)
+        run: |
+          [ -f ort/lib/libonnxruntime.so ] && exit 0
+          curl -fsSL --retry 6 --retry-all-errors --retry-delay 5 -o ort.tgz \
+            https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-linux-x64-1.22.0.tgz
+          mkdir -p ort && tar xzf ort.tgz -C ort --strip-components=1
       - name: Build
         run: |
-          cmake -S studio -B build-studio -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake -S studio -B build-studio -G Ninja -DCMAKE_BUILD_TYPE=Release -DLA_ORT_DIR=$PWD/ort
           cmake --build build-studio
       - name: Selftest (xvfb + Mesa llvmpipe)
         env:
@@ -136,9 +146,20 @@ jobs:
           arch: 'win64_msvc2022_64'
           modules: 'qtquick3d qtshadertools qtserialport qtmultimedia'
           cache: true
+      - uses: actions/cache@v4
+        with:
+          path: ort
+          key: ort-1.22.0-windows
+      - name: ONNX Runtime (unduh dengan retry)
+        shell: bash
+        run: |
+          [ -f ort/lib/onnxruntime.dll ] && exit 0
+          curl -fsSL --retry 6 --retry-all-errors --retry-delay 5 -o ort.zip \
+            https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-win-x64-1.22.0.zip
+          7z x -y ort.zip > /dev/null && mv onnxruntime-win-x64-1.22.0 ort
       - name: Build
         run: |
-          cmake -S studio -B build-studio -G "Visual Studio 17 2022" -A x64
+          cmake -S studio -B build-studio -G "Visual Studio 17 2022" -A x64 -DLA_ORT_DIR="${{ github.workspace }}/ort"
           cmake --build build-studio --config Release
       - name: Paket (windeployqt)
         shell: pwsh

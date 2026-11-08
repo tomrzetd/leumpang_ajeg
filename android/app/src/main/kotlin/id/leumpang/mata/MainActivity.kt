@@ -141,7 +141,7 @@ private fun CameraView(e: Engine, @Suppress("UNUSED_PARAMETER") tick: Int) {
                 for (i in 0 until m.n) {
                     val mm = m.distMm[m.n - 1 - i]                  // sektor 0 = kanan -> gambar kanan
                     val col = when { mm < 350 -> Color(0xDDD9534F); mm < 900 -> Color(0xDDF0AD4E); mm < ObstacleMap.FREE -> Color(0xDD8BC34A); else -> Color(0x553FA34D) }
-                    drawRect(col, Offset(ox + i * bw + 2, oy + h - 18), Size(bw - 4, 14))
+                    drawRect(col, Offset(ox + i * bw + 2, oy + h - 18), Size(bw - 4f, 14f))
                 }
             }
         }
