@@ -1,5 +1,5 @@
 // =============================================================================
-//  Leumpang Ajeg - firmware ESP32-S3: KONFIGURASI BOARD
+//  Leumpang Ajeg - firmware ESP (S3 / P4): KONFIGURASI
 //  (konstanta robot/gait ada di core/include/leumpang/types.h)
 //  Semua makro #ifndef dapat di-override lewat build flag (-D...).
 // =============================================================================
@@ -8,23 +8,16 @@
 #include <stddef.h>
 
 // ---------------------------------------------------------------------------
-//  Pin ESP32-S3 N16R8 (sama dengan diagram wiring V3)
-//  Dicadangkan: GPIO19/20 (USB D-/D+), GPIO26..32 (flash), GPIO33..37 (Octal PSRAM),
-//  strapping GPIO0/3/45/46.
+//  Pin per board (dipilih otomatis dari target ESP-IDF)
 // ---------------------------------------------------------------------------
-constexpr int PIN_LED1 = 2;      // heartbeat sederhana (opsional)
-constexpr int PIN_RGB  = 4;      // WS2812B status
-constexpr int PIN_T2   = 5;      // pin ukur jitter: HIGH selama satu siklus kontrol
-
-constexpr int BUS_R_TX = 17, BUS_R_RX = 16, BUS_R_EN = 6;   // Serial1 kanan
-constexpr int BUS_L_TX = 21, BUS_L_RX = 18, BUS_L_EN = 7;   // Serial2 kiri
-
-constexpr int IMU_SDA = 8, IMU_SCL = 9;
-#ifndef ICM_INT_GPIO
-#define ICM_INT_GPIO -1          // diagram: INT = NC. Isi mis. 12 bila INT disambung.
+#include "sdkconfig.h"
+#if CONFIG_IDF_TARGET_ESP32P4
+#include "board_esp32p4.h"
+#elif CONFIG_IDF_TARGET_ESP32S3
+#include "board_esp32s3.h"
+#else
+#error "Target belum didukung: pakai esp32s3 atau esp32p4"
 #endif
-
-constexpr int LCD_SCK = 10, LCD_MOSI = 11, LCD_CS = 13, LCD_DC = 14, LCD_RST = 15;
 
 // ---------------------------------------------------------------------------
 //  Arah bus ICS (EN driver half-duplex)
@@ -75,7 +68,7 @@ constexpr int PRIO_SERVICE = 1;
 constexpr uint32_t STACK_CONTROL = 8192;
 constexpr uint32_t STACK_IMU     = 4096;
 constexpr uint32_t STACK_LOGGER  = 3072;
-constexpr uint32_t STACK_CONSOLE = 3072;
+constexpr uint32_t STACK_CONSOLE = 6144;
 constexpr uint32_t STACK_UI      = 6144;
 constexpr uint32_t STACK_SERVICE = 4096;
 constexpr uint32_t STACK_HTTPD   = 8192;
@@ -129,36 +122,30 @@ constexpr bool IMU_SWAP_DEFAULT = false;
 constexpr uint8_t WIFI_AP_CHANNEL = 6;
 
 // ---------------------------------------------------------------------------
+//  SD card / storage
+// ---------------------------------------------------------------------------
+constexpr int      PRIO_STORAGE  = 1;
+constexpr uint32_t STACK_STORAGE = 6144;
+constexpr uint32_t BBX_ROTATE_BYTES = 50u * 1024 * 1024;   // file blackbox baru tiap 50 MB
+#ifndef LA_BLACKBOX_DEFAULT
+#define LA_BLACKBOX_DEFAULT 1             // rekam blackbox bila SD terpasang
+#endif
+
+// ---------------------------------------------------------------------------
 //  Guard compile-time pin
 // ---------------------------------------------------------------------------
-constexpr int V4_USED_PINS[] = {
-    PIN_LED1, PIN_RGB, PIN_T2, BUS_R_TX, BUS_R_RX, BUS_L_TX, BUS_L_RX,
-    IMU_SDA, IMU_SCL, LCD_SCK, LCD_MOSI, LCD_CS, LCD_DC, LCD_RST,
-#if ICS_DIR_MODE != 0
-    BUS_R_EN, BUS_L_EN,
-#endif
-#if ICM_INT_GPIO >= 0
-    ICM_INT_GPIO,
-#endif
-};
-constexpr size_t V4_PIN_COUNT = sizeof(V4_USED_PINS) / sizeof(V4_USED_PINS[0]);
-constexpr bool v4PinsUnique() {
-    for (size_t i = 0; i < V4_PIN_COUNT; ++i)
-        for (size_t j = i + 1; j < V4_PIN_COUNT; ++j)
-            if (V4_USED_PINS[i] == V4_USED_PINS[j]) return false;
+constexpr size_t BOARD_PIN_COUNT = sizeof(BOARD_USED_PINS) / sizeof(BOARD_USED_PINS[0]);
+constexpr bool boardPinsUnique() {
+    for (size_t i = 0; i < BOARD_PIN_COUNT; ++i)
+        for (size_t j = i + 1; j < BOARD_PIN_COUNT; ++j)
+            if (BOARD_USED_PINS[i] == BOARD_USED_PINS[j]) return false;
     return true;
 }
-constexpr bool v4PinsAvoidReserved() {
-    for (size_t i = 0; i < V4_PIN_COUNT; ++i) {
-        const int p = V4_USED_PINS[i];
-        if (p == 0 || p == 3 || p == 19 || p == 20 || p == 45 || p == 46) return false;
-        if (p >= 26 && p <= 37) return false;
-        if (p > 48 || p < 0) return false;
-        if (p >= 22 && p <= 25) return false;    // tidak ada di ESP32-S3
-    }
+constexpr bool boardPinsAvoidReserved() {
+    for (size_t i = 0; i < BOARD_PIN_COUNT; ++i) if (boardPinReserved(BOARD_USED_PINS[i])) return false;
     return true;
 }
-static_assert(v4PinsUnique(), "GPIO conflict: dua fungsi memakai pin yang sama");
-static_assert(v4PinsAvoidReserved(), "Memakai GPIO USB/flash/PSRAM/strapping yang dicadangkan");
+static_assert(boardPinsUnique(), "GPIO conflict: dua fungsi memakai pin yang sama");
+static_assert(boardPinsAvoidReserved(), "Memakai GPIO yang dicadangkan board (USB/flash/PSRAM/strapping/C6/TF)");
 static_assert(ICS_DIR_MODE >= 0 && ICS_DIR_MODE <= 2, "ICS_DIR_MODE harus 0/1/2");
 static_assert(sizeof(WIFI_AP_PASS) - 1 >= 8, "WPA2 butuh password AP >= 8 karakter");

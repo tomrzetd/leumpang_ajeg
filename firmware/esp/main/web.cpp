@@ -92,8 +92,9 @@ void wifiInit() {
     ta.callback = reconnCb; ta.name = "wifi_reconn";
     esp_timer_create(&ta, &s_reconnTimer);
 
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
     uint8_t mac[6] = {0};
-    esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
+    esp_wifi_get_mac(WIFI_IF_AP, mac);       // P4: MAC milik ESP32-C6 (esp_wifi_remote)
     snprintf(s_net.apSsid, sizeof(s_net.apSsid), "LEUMPANG-AJEG-%02X%02X", mac[4], mac[5]);
     strcpy(s_net.staIp, "-");
 
@@ -106,7 +107,6 @@ void wifiInit() {
     ap.ap.authmode = WIFI_AUTH_WPA2_PSK;
     ap.ap.pmf_cfg.required = false;
 
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap));
 
     char ssid[33] = {0}, pass[65] = {0};
@@ -440,9 +440,9 @@ void wifi_set_sta(const char* ssid, const char* pass) {
 //  DASHBOARD
 // ============================================================================
 const char DASHBOARD_HTML[] = R"HTML(<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Leumpang Ajeg // ESP32-S3</title><style>
+<title>Leumpang Ajeg</title><style>
 :root{--g:#35ff75;--g2:#a5ffc0;--dim:#4c8d60;--line:#164724}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#06200e,#010402 55%);color:var(--g);font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:14px}.wrap{max-width:1500px;margin:auto;padding:12px}.hdr{display:flex;gap:12px;align-items:center;justify-content:space-between;border:1px solid var(--line);background:#020b05;padding:12px;box-shadow:0 0 24px #00ff4422}.title{font-weight:800;letter-spacing:2px}.blink{animation:b 1s steps(2) infinite}@keyframes b{50%{opacity:.2}}.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:10px;margin-top:10px}.card{grid-column:span 3;border:1px solid var(--line);background:#031008dd;padding:10px;min-width:0}.wide{grid-column:span 6}.full{grid-column:1/-1}h3{margin:0 0 8px;color:var(--g2);font-size:13px;text-transform:uppercase;letter-spacing:1px}.kv{display:grid;grid-template-columns:1fr auto;gap:5px;border-bottom:1px dashed #16472455;padding:3px 0}button,input,select{font:inherit;background:#020704;color:var(--g);border:1px solid var(--dim);padding:8px}button{cursor:pointer}button:hover{background:#0a2712}.danger{border-color:#a33;color:#ff8989}.go{border-color:#35ff75;color:#b8ffca}.btns{display:flex;flex-wrap:wrap;gap:8px}.form{display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:8px}.field{display:flex;flex-direction:column;gap:3px;color:var(--dim)}canvas{width:100%;height:300px;border:1px solid #153d21;background:#010603}table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:5px;border-bottom:1px solid #10351b;text-align:right}th:first-child,td:first-child{text-align:left}.ok{color:#7dff9f}.bad{color:#ff7373}.warn{color:#ffd166}.note{color:var(--dim);font-size:12px;line-height:1.5}.scroll{overflow:auto;max-height:440px}@media(max-width:900px){.card,.wide{grid-column:span 6}.form{grid-template-columns:repeat(2,1fr)}}@media(max-width:600px){.card,.wide{grid-column:1/-1}.form{grid-template-columns:1fr 1fr}.hdr{align-items:flex-start;flex-direction:column}canvas{height:250px}}
-</style></head><body><div class="wrap"><div class="hdr"><div><div class="title">[ LEUMPANG AJEG // WALKING STEADILY // ESP32-S3 ]</div><div class="note">Mahony IMU + ICS feedback + trim NVS · <span class="blink">_</span></div></div><div id="conn">LINK: --</div></div>
+</style></head><body><div class="wrap"><div class="hdr"><div><div class="title">[ LEUMPANG AJEG // WALKING STEADILY ]</div><div class="note">Mahony IMU + ICS feedback + trim NVS · <span class="blink">_</span></div></div><div id="conn">LINK: --</div></div>
 <div class="grid">
 <div class="card"><h3>MODE</h3><div class="kv"><span>state</span><span id="mode">--</span></div><div class="kv"><span>fwct</span><span id="fwct">--</span></div><div class="kv"><span>support</span><span id="jiku">--</span></div><div class="kv"><span>NVS</span><span id="nvs">--</span></div></div>
 <div class="card"><h3>IMU</h3><div class="kv"><span>roll</span><span id="roll">--</span></div><div class="kv"><span>pitch</span><span id="pitch">--</span></div><div class="kv"><span>age / rate</span><span id="imuage">--</span></div><div class="kv"><span>cal</span><span id="cal">--</span></div></div>

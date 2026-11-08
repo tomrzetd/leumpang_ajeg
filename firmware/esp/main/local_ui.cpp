@@ -211,7 +211,7 @@ void drawStatic(Canvas& c) {
     c.rect(1, 1, 318, 238, UI_DIM);
     c.fillRect(2, 2, 316, 20, UI_HDR);
     c.text(7, 5, "LEUMPANG AJEG", UI_GREEN, 2);
-    c.text(229, 8, "S3 LAP:5760", UI_CYAN);
+    c.text(229, 8, LA_BOARD_ID == 2 ? "ESP32-P4" : "ESP32-S3", UI_CYAN);
     c.rect(4, 27, 151, 177, UI_DIM);
     c.rect(160, 27, 156, 177, UI_DIM);
     c.hline(161, 47, 154, UI_DIM);

@@ -39,7 +39,7 @@
 |---|---|
 | `core/` | leumpang-core: `types.h`, `ics.h`, `controller.*`, `lap.*`, `lap_endpoint.*` |
 | `firmware/components/leumpang_core` | pembungkus komponen ESP-IDF untuk `core/` |
-| `firmware/esp32s3/` | firmware ESP32-S3 (HAL: UART ICS, IMU ICM-20948, LCD, Wi-Fi, web, LAP TCP) |
+| `firmware/esp/` | firmware ESP-IDF untuk ESP32-S3 & ESP32-P4 (HAL: UART ICS, IMU, LCD, Wi-Fi, web, LAP TCP + serial, SD) |
 | `sim/` | `leumpang_sim`: core + model servo + IMU sintetis + server LAP TCP |
 | `tools/` | `lap.py` (protokol Python), `lapctl.py` (CLI) |
 | `tests/` | unit, fuzz, skenario, **paritas V4↔core**, lintas-bahasa, stub IDF |

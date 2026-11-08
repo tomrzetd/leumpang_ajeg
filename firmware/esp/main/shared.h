@@ -1,5 +1,5 @@
 // =============================================================================
-//  Firmware ESP32-S3: antarmuka antar-modul
+//  Firmware ESP (S3/P4): antarmuka antar-modul
 //  Logika robot ada di leumpang-core (namespace la); file ini menyediakan nama
 //  pendek untuk modul board (web, UI, IMU, persistensi).
 // =============================================================================
@@ -31,12 +31,23 @@ inline bool        mode_is_gait(Mode m)     { return la::modeIsGait(m); }
 inline bool        mode_persist_safe(Mode m){ return la::modePersistSafe(m); }
 inline RuntimeConfig runtime_config_default() { return la::runtimeConfigDefault(); }
 
+namespace la { class MotionStore; template <typename T, uint32_t N> class SpscRing; struct BlackboxRecord; }
+
 // ---- Kontrol (control.cpp, core1) ------------------------------------------
 void control_init(const RuntimeConfig& cfg, const int16_t trim[2][SERVO_SLOTS]);
 bool control_start();
 bool control_queue_cmd(const RobotCommand& c);     // non-blocking; false bila penuh
 bool control_push_key(char c);
 TelemetrySnapshot telemetry_copy();
+la::MotionStore& control_motions();
+void control_set_blackbox(la::SpscRing<la::BlackboxRecord, 256>* ring);   // sebelum control_start
+
+// ---- Konsol & SD (console.cpp, storage.cpp) ---------------------------------
+void console_early_init();                 // queue log (panggil paling awal)
+void console_start();
+void storage_init();                       // mount SD, muat motion, buka blackbox
+bool storage_sd_ok();
+void storage_save_motion(int slot, const uint8_t* d, size_t n);
 
 // ---- IMU (imu_icm20948.cpp, core0) -----------------------------------------
 struct ImuSample {

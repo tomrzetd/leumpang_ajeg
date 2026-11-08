@@ -60,16 +60,19 @@ if(Python3_FOUND AND TARGET leumpang_sim)
   add_test(NAME test_lap_python COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_lap_py.py $<TARGET_FILE:leumpang_sim>)
 endif()
 
-# ---- cek firmware ESP32-S3 di host (syntax + link semua modul) -------------
+# ---- cek firmware ESP (S3 & P4) di host: syntax + link semua modul ------------
 if(LA_FIRMWARE_CHECK AND UNIX AND NOT APPLE AND Python3_FOUND)
   set(WEAK ${CMAKE_BINARY_DIR}/idf_weak_stubs.cpp)
   add_custom_command(OUTPUT ${WEAK}
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/gen_weak_stubs.py ${CMAKE_SOURCE_DIR}/tests/idf_stubs/idf_stub.h ${WEAK}
     DEPENDS tests/gen_weak_stubs.py tests/idf_stubs/idf_stub.h)
-  file(GLOB FW_S3_SRC firmware/esp32s3/main/*.cpp)
-  add_executable(fw_s3_linkcheck ${FW_S3_SRC} ${LA_CORE_SRC} ${WEAK})
-  target_include_directories(fw_s3_linkcheck PRIVATE tests/idf_stubs core/include firmware/esp32s3/main)
   set_source_files_properties(${WEAK} PROPERTIES COMPILE_OPTIONS "-w")
-  target_compile_options(fw_s3_linkcheck PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
-  target_link_options(fw_s3_linkcheck PRIVATE -nostartfiles -Wl,-e,app_main)
+  file(GLOB FW_ESP_SRC firmware/esp/main/*.cpp)
+  foreach(v s3 p4)
+    add_executable(fw_${v}_linkcheck ${FW_ESP_SRC} ${LA_CORE_SRC} ${WEAK})
+    target_include_directories(fw_${v}_linkcheck PRIVATE tests/idf_stubs core/include firmware/esp/main)
+    target_compile_options(fw_${v}_linkcheck PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
+    target_link_options(fw_${v}_linkcheck PRIVATE -nostartfiles -Wl,-e,app_main)
+  endforeach()
+  target_compile_definitions(fw_p4_linkcheck PRIVATE LA_STUB_P4)
 endif()

@@ -1,5 +1,5 @@
 // =============================================================================
-//  Firmware ESP32-S3 - HAL kontrol (core1)
+//  Firmware ESP (S3/P4) - HAL kontrol (core1)
 //  Logika robot: la::Controller (core/). File ini hanya:
 //   * EspIcsBus  : UART 1,25 Mbps 8E1 + pin arah EN (implementasi la::ServoBus)
 //   * QueueInbox : queue FreeRTOS -> la::Inbox
@@ -179,6 +179,8 @@ void controlTask(void*) {
 //  API
 // ============================================================================
 bool control_queue_cmd(const RobotCommand& c) { return g_cmdQ && xQueueSend(g_cmdQ, &c, 0) == pdTRUE; }
+la::MotionStore& control_motions() { return g_ctrl.motions(); }
+void control_set_blackbox(la::BlackboxRing* ring) { g_ctrl.setBlackbox(ring); }
 bool control_push_key(char c)                 { return g_keyQ && xQueueSend(g_keyQ, &c, 0) == pdTRUE; }
 
 TelemetrySnapshot telemetry_copy() {

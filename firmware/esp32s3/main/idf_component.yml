@@ -1,4 +1,0 @@
-dependencies:
-  idf: ">=5.3"
-  # Hapus baris berikut + set APP_USE_MDNS 0 di app_config.h bila tidak butuh khr-biped.local
-  espressif/mdns: "^1.4"

@@ -19,9 +19,9 @@ for piece in src.split(';'):
         continue
     ret, name, args = m.group(1).strip(), m.group(2), m.group(3)
     parts = [a.strip() for a in args.split(',')] if args.strip() not in ('', 'void') else []
-    named = ', '.join(f'{a} a{i}' for i, a in enumerate(parts))
+    named = ', '.join(a if a == '...' else f'{a} a{i}' for i, a in enumerate(parts))
     body = '' if ret == 'void' else 'return 0;'
-    voids = ''.join(f'(void)a{i};' for i in range(len(parts)))
+    voids = ''.join(f'(void)a{i};' for i, a in enumerate(parts) if a != '...')
     out.append(f'__attribute__((weak)) {ret} {name}({named}) {{ {voids} {body} }}')
 out.append('extern __attribute__((weak)) esp_event_base_t const WIFI_EVENT = "W";')
 out.append('extern __attribute__((weak)) esp_event_base_t const IP_EVENT = "I";')

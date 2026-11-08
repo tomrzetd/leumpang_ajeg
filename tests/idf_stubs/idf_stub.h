@@ -206,6 +206,34 @@ int httpd_req_recv(httpd_req_t*, char*, size_t); esp_err_t httpd_query_key_value
 int mbedtls_base64_encode(unsigned char*, size_t, size_t*, const unsigned char*, size_t);
 esp_err_t mdns_init(void); esp_err_t mdns_hostname_set(const char*);
 esp_err_t mdns_service_add(const char*, const char*, const char*, uint16_t, void*, size_t);
+// ---- log / rom ----
+typedef enum { ESP_LOG_NONE = 0, ESP_LOG_ERROR, ESP_LOG_WARN, ESP_LOG_INFO } esp_log_level_t;
+void esp_log_level_set(const char*, esp_log_level_t);
+int esp_rom_printf(const char*, ...);
+// ---- USB-Serial-JTAG ----
+typedef struct { uint32_t tx_buffer_size; uint32_t rx_buffer_size; } usb_serial_jtag_driver_config_t;
+#define USB_SERIAL_JTAG_DRIVER_CONFIG_DEFAULT() { 256, 256 }
+esp_err_t usb_serial_jtag_driver_install(usb_serial_jtag_driver_config_t*);
+int usb_serial_jtag_read_bytes(void*, uint32_t, TickType_t);
+int usb_serial_jtag_write_bytes(const void*, size_t, TickType_t);
+// ---- SDMMC / FATFS ----
+typedef void* sd_pwr_ctrl_handle_t;
+typedef struct { int slot; int max_freq_khz; sd_pwr_ctrl_handle_t pwr_ctrl_handle; uint32_t flags; } sdmmc_host_t;
+#define SDMMC_HOST_DEFAULT() { 1, 20000, 0, 0 }
+#define SDMMC_HOST_SLOT_0 0
+#define SDMMC_FREQ_DEFAULT 20000
+#define SDMMC_FREQ_HIGHSPEED 40000
+#define SDMMC_SLOT_FLAG_INTERNAL_PULLUP (1 << 0)
+typedef struct { gpio_num_t clk, cmd, d0, d1, d2, d3; uint8_t width; uint32_t flags; } sdmmc_slot_config_t;
+#define SDMMC_SLOT_CONFIG_DEFAULT() { -1, -1, -1, -1, -1, -1, 4, 0 }
+typedef struct { char name[8]; } sdmmc_cid_t;
+typedef struct { int capacity; int sector_size; } sdmmc_csd_t;
+typedef struct { sdmmc_cid_t cid; sdmmc_csd_t csd; } sdmmc_card_t;
+typedef struct { bool format_if_mount_failed; int max_files; size_t allocation_unit_size; } esp_vfs_fat_sdmmc_mount_config_t;
+esp_err_t esp_vfs_fat_sdmmc_mount(const char*, const sdmmc_host_t*, const void*, const esp_vfs_fat_sdmmc_mount_config_t*, sdmmc_card_t**);
+typedef struct { int ldo_chan_id; } sd_pwr_ctrl_ldo_config_t;
+esp_err_t sd_pwr_ctrl_new_on_chip_ldo(const sd_pwr_ctrl_ldo_config_t*, sd_pwr_ctrl_handle_t*);
+esp_err_t esp_wifi_get_mac(wifi_interface_t, uint8_t*);
 #ifdef __cplusplus
 }
 #endif

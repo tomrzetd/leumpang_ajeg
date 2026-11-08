@@ -1,0 +1,20 @@
+# ---- Umum (S3 & P4). Spesifik chip: sdkconfig.defaults.<target> ----
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_SPIRAM=y
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+CONFIG_FREERTOS_HZ=1000
+
+# Isolasi core: Wi-Fi/lwIP di core0, core1 khusus kontrol
+CONFIG_LWIP_TCPIP_TASK_AFFINITY_CPU0=y
+# ISR UART tetap jalan saat cache flash dimatikan (tulis NVS)
+CONFIG_UART_ISR_IN_IRAM=y
+# HTTP: header browser + Authorization sering > 512 byte
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
+CONFIG_HTTPD_MAX_URI_LEN=512
+# FATFS: nama file panjang tidak perlu; buffer di heap
+CONFIG_FATFS_LFN_NONE=y
+
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=6144
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=5

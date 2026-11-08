@@ -1,0 +1,13 @@
+dependencies:
+  idf: ">=5.3"
+  # Hapus baris berikut + set APP_USE_MDNS 0 di app_config.h bila tidak butuh leumpang-ajeg.local
+  espressif/mdns: "^1.4"
+  # ESP32-P4 tidak punya radio: Wi-Fi lewat ESP32-C6 on-board (SDIO) - API esp_wifi tetap sama
+  espressif/esp_wifi_remote:
+    version: ">=0.10"
+    rules:
+      - if: "target in [esp32p4]"
+  espressif/esp_hosted:
+    version: "^2.4"
+    rules:
+      - if: "target in [esp32p4]"

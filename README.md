@@ -38,13 +38,13 @@ Di terminal simulator Anda juga bisa mengetik perintah konsol robot (`r g x c t 
 
 ```bash
 . $IDF_PATH/export.sh                             # ESP-IDF >= 5.3
-cd firmware/esp32s3
+cd firmware/esp
 idf.py set-target esp32s3
 idf.py build flash monitor
 ```
 SoftAP `LEUMPANG-AJEG-xxxx`, dashboard `http://192.168.4.1` / `http://leumpang-ajeg.local`,
 LAP TCP `192.168.4.1:5760`. Detail wiring, temuan review, dan prosedur uji pertama:
-[firmware/esp32s3/README.md](firmware/esp32s3/README.md).
+[firmware/esp/README.md](firmware/esp/README.md).
 
-⚠️ Ganti `WIFI_AP_PASS` dan `DASH_PASS` di `firmware/esp32s3/main/app_config.h`, dan persempit
+⚠️ Ganti `WIFI_AP_PASS` dan `DASH_PASS` di `firmware/esp/main/app_config.h`, dan persempit
 batas `lo/hi` tiap sendi di `core/src/controller.cpp` (`JOINTS`) sebelum uji lantai.

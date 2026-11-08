@@ -1,11 +1,11 @@
 // =============================================================================
-//  Leumpang Ajeg ("walking steadily") - firmware ESP32-S3 N16R8 (ESP-IDF)
-//  app_main: NVS, logger, konsol serial, layanan persistensi, start semua task.
+//  Leumpang Ajeg ("walking steadily") - firmware ESP-IDF untuk ESP32-S3 dan ESP32-P4
+//  app_main: NVS, konsol+LAP serial, SD, layanan persistensi, start semua task.
 //
 //  Peta task:
 //    core1 : WalkCtrl (prio 20, 100 Hz)  <- satu-satunya task aplikasi di core1
-//    core0 : IMU (17, 500 Hz) | httpd (5) | Console (3) | Log (2) | LocalUI (2) | Service (1)
-//            + Wi-Fi/lwIP/esp_timer bawaan IDF
+//    core0 : IMU (17, 500 Hz) | httpd (5) | LAP TCP (4) | Console+LAP serial (3)
+//            | LocalUI (2) | Storage SD (1) | Service NVS (1) + Wi-Fi/lwIP bawaan IDF
 // =============================================================================
 #include "shared.h"
 
@@ -25,49 +25,6 @@
 #include "esp_rom_crc.h"
 
 // ============================================================================
-//  LOGGER NON-BLOCKING
-// ============================================================================
-namespace {
-constexpr size_t LOG_LINE_MAX = 160;
-struct LogLine { char text[LOG_LINE_MAX]; };
-QueueHandle_t s_logQ = nullptr;
-
-void loggerTask(void*) {
-    LogLine ln;
-    for (;;) {
-        if (xQueueReceive(s_logQ, &ln, portMAX_DELAY) == pdTRUE) {
-            fputs(ln.text, stdout);
-            fflush(stdout);
-            lap_forward_log(ln.text);
-        }
-    }
-}
-
-// Konsol: baca stdin non-blocking (UART0 atau USB-Serial-JTAG), teruskan ke task kontrol.
-void consoleTask(void*) {
-    const int fd = fileno(stdin);
-    const int fl = fcntl(fd, F_GETFL, 0);
-    if (fl >= 0) fcntl(fd, F_SETFL, fl | O_NONBLOCK);
-    char buf[16];
-    for (;;) {
-        const ssize_t n = read(fd, buf, sizeof(buf));
-        if (n > 0) { for (ssize_t i = 0; i < n; ++i) control_push_key(buf[i]); }
-        else vTaskDelay(pdMS_TO_TICKS(10));
-    }
-}
-}  // namespace
-
-void logPrintf(const char* fmt, ...) {
-    if (!s_logQ) return;
-    LogLine ln;
-    va_list ap;
-    va_start(ap, fmt);
-    vsnprintf(ln.text, sizeof(ln.text), fmt, ap);
-    va_end(ap);
-    xQueueSend(s_logQ, &ln, 0);                  // tidak pernah memblokir; buang bila penuh
-}
-
-// ============================================================================
 //  PERSISTENSI NVS TERTUNDA  [V4-NVS]
 //  Tulis/erase flash mematikan cache KEDUA core (task kontrol di flash ikut berhenti
 //  puluhan ms). V3 menulis NVS langsung dari handler HTTP - bisa terjadi saat jalan.
@@ -75,7 +32,7 @@ void logPrintf(const char* fmt, ...) {
 // ============================================================================
 namespace {
 constexpr uint32_t PERSIST_MAGIC = 0x4B485234;   // "KHR4"
-constexpr uint16_t PERSIST_VER   = 1;
+constexpr uint16_t PERSIST_VER   = 2;      // v2: RuntimeConfig + field gait (Fase 1)
 struct PersistBlob {
     uint32_t magic;
     uint16_t version, size;
@@ -188,16 +145,16 @@ uint32_t persist_saved_gen() { return s_savedGen; }
 //  app_main
 // ============================================================================
 extern "C" void app_main(void) {
+    console_early_init();                 // queue log siap sebelum modul lain mencetak
     esp_err_t e = nvs_flash_init();
     if (e == ESP_ERR_NVS_NO_FREE_PAGES || e == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         nvs_flash_erase();
         nvs_flash_init();
     }
-
-    s_logQ = xQueueCreate(32, sizeof(LogLine));
     s_wifiMux = xSemaphoreCreateMutex();
-    xTaskCreatePinnedToCore(loggerTask, "Log", STACK_LOGGER, nullptr, PRIO_LOGGER, nullptr, CORE_SYSTEM);
-    logPrintf("\r\n=== Leumpang Ajeg (ESP32-S3) core %u.%u.%u - tekan '?' untuk bantuan ===\r\n", la::CORE_VER_MAJOR, la::CORE_VER_MINOR, la::CORE_VER_PATCH);
+    console_start();
+    logPrintf("\r\n=== Leumpang Ajeg (%s) core %u.%u.%u - tekan '?' untuk bantuan ===\r\n",
+              LA_BOARD_NAME, la::CORE_VER_MAJOR, la::CORE_VER_MINOR, la::CORE_VER_PATCH);
 
     RuntimeConfig cfg = runtime_config_default();
     cfg.imuSwap = IMU_SWAP_DEFAULT;
@@ -206,9 +163,9 @@ extern "C" void app_main(void) {
     else                              logPrintf("NVS: konfigurasi default\r\n");
 
     control_init(cfg, trim);
+    storage_init();                       // SD: motion -> MotionStore, blackbox -> ring kontrol
     if (!imu_start())     logPrintf("GAGAL membuat task IMU!\r\n");
     if (!control_start()) logPrintf("GAGAL membuat task kontrol!\r\n");
-    xTaskCreatePinnedToCore(consoleTask, "Console", STACK_CONSOLE, nullptr, PRIO_CONSOLE, nullptr, CORE_SYSTEM);
     web_start();
     lap_tcp_start();
     local_ui_start();
