@@ -15,7 +15,7 @@
                            │  ServoBus / ImuInput / Platform / Inbox
         ┌──────────────┬───┴──────────┬──────────────────┐
      HAL ESP32-S3   HAL ESP32-P4   HAL STM32H562     HAL simulasi
-     FreeRTOS       FreeRTOS       bare-metal ISR    host (MuJoCo Fase 2)
+     FreeRTOS       FreeRTOS       bare-metal ISR    host / di dalam studio
      Wi-Fi + UART   Wi-Fi(C6)+USB  USB CDC
         └──────────────┴──────┬───────┘
                        SD card: motion LAM1, blackbox .lbb, (STM32) config
@@ -52,6 +52,8 @@
 | `sim/` | `leumpang_sim`: core + model servo + IMU sintetis + server LAP TCP |
 | `tools/` | `lap.py` (protokol Python), `lapctl.py` (CLI), `lam.py` (JSON→LAM1), `bbx2csv.py` |
 | `motions/` | contoh template gerak (`lambai.json`) |
+| `studio/` | Leumpang Studio: `lib/` tanpa Qt (FK, retarget, MotionDoc, LapClient, SimRobot, PoseOnnx), `app/` backend Qt, `qml/` UI |
+| `model/` | mesh STL + URDF, dibangkitkan `tools/gen_model.py` (juga `studio/lib/robot_model_gen.h`) |
 | `tests/` | unit, fuzz, skenario, **paritas V4↔core**, lintas-bahasa, stub IDF |
 | `docs/` | arsitektur, protokol, roadmap |
 
@@ -63,6 +65,8 @@
 | `test_controller` | boot sync, servo mati, READY→kalibrasi→BALANCE→langkah, jatuh→re-arm, IMU basi, parser ICS (termasuk jebakan echo V3) |
 | `test_lap` | CRC/COBS vektor standar, 5000 roundtrip acak, resync setelah sampah, fuzz 2 juta byte, perilaku endpoint |
 | `test_lap_python` | klien Python ↔ simulator C++ lewat TCP: handshake, stream, param, trim, jatuh, re-arm, robustness |
+| `test_studio` | FK twin = IK core (BALANCE & WALK_CONT), retarget kamera 2D → sendi → FK (242/242), pratinjau gerak studio = pemutar firmware, RDP, MoveNet, LapClient ↔ SimRobot (unggah, putar, live pose) |
+| CI `studio-linux` / `studio-windows` | build Qt 6.8 + `--selftest` (simulator, gerak 810, live pose 820, tangkapan layar 7 tab, nol warning QML) |
 | `test_imu` | driver ICM-20948 (register sintetis) + konvergensi Mahony, bias gyro, penolakan impak |
 | `fw_s3_linkcheck`, `fw_p4_linkcheck` (build) | seluruh firmware ESP + core ter-compile & ter-link terhadap stub API IDF |
 | CI `firmware-esp` | build ESP-IDF **asli**: S3 v5.3.2 & v5.4.1, P4 v5.5.1 |

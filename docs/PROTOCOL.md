@@ -65,6 +65,7 @@ Satuan: sudut **derajat** (f32), panjang **mm**, waktu **ms** kecuali disebut.
 | 41 | MOTION_CHUNK | host→robot | `u8 slot, u16 offset, u8 data[≤237]` — harus berurutan |
 | 42 | MOTION_END | host→robot | `u8 slot, u8 save` — validasi; `save=1` juga tulis ke SD |
 | 43 | MOTION_PLAY | host→robot | `u8 slot, u8 play` — 1 putar (hanya dari READY), 0 berhenti |
+| 45 | POSE_TARGET | host→robot | `u32 mask, u16 ttlMs, i16 joint[2][11]` (50 B) — pose langsung, mode 820 (§3.5) |
 | 44 | MOTION_STATUS | robot→host | 4 × (`u8 state, u8 nFrames, char name[16]`) (72 B); state 0 kosong, 1 menulis, 2 siap, 3 diputar |
 | 70 | SIM_IMU | host→sim | `f32 roll, f32 pitch, u8 sensorOk` |
 | 71 | SIM_FAULT | host→sim | `u8 bus, u8 slot, u8 dead` |
@@ -73,11 +74,11 @@ Satuan: sudut **derajat** (f32), panjang **mm**, waktu **ms** kecuali disebut.
 
 * `role`: 0 robot, 1 phone, 2 desktop, 3 sim, 4 tool
 * `board`: 0 unknown, 1 esp32s3, 2 esp32p4, 3 stm32h562, 4 sim
-* `caps` (bit): 0 Wi-Fi, 1 SD, 2 gait intent, 3 motion, 4 sim, 5 LCD, 6 USB CDC
+* `caps` (bit): 0 Wi-Fi, 1 SD, 2 gait intent, 3 motion, 4 sim, 5 LCD, 6 USB CDC, 7 live pose
 * `flags` TELEMETRY (bit): 0 IMU fresh, 1 IMU init, 2 kalibrasi selesai, 3 persist pending, 4 kaki tumpu kiri, 5 niat gait aktif
 * `status` ACK: 0 OK, 1 BAD_LEN, 2 UNSUPPORTED, 3 REJECTED_STATE, 4 BUSY, 5 BAD_VALUE
 * `mode`: 700 RAW, 705 FALLEN, 710 RESET, 720 READY, 730 BALANCE, 740–770 langkah, 780 POSE_HOLD, 790 ANGLE, 791 MIRROR,
-  800 WALK_CONT (gait kontinu, eksperimental), 810 MOTION_PLAY
+  800 WALK_CONT (gait kontinu, eksperimental), 810 MOTION_PLAY, 820 LIVE_POSE
 * `param`: 0 fallDeg, 1 rearmDeg, 2 imuStaleMs, 3 servoStep, 4 trigRollDeg, 5 trigPitchDeg, 6 footLift,
   7 swayBase, 8 swayGain, 9 rollSign, 10 pitchSign, 11 imuSwap,
   12 gaitEnable (0/1, default 0), 13 gaitStepMax (mm/langkah, default 10, maks 25),
@@ -119,6 +120,17 @@ u16 crc16 (CCITT-FALSE atas semua byte sebelumnya)
   (termasuk trim); satu nilai di luar batas membatalkan seluruh gerakan.
 * Alat: `tools/lam.py build gerak.json gerak.lam` (JSON → LAM1), `tools/lapctl.py motion-upload gerak.lam 0`,
   `motion-play 0`, `motion-stop`, `motions`. Contoh: `motions/lambai.json`.
+
+### 3.5 POSE_TARGET (pose langsung, mode 820)
+
+Dipakai Leumpang Studio (panel servo "Live ke robot", kamera "Live ke robot") dan kelak HP.
+* `joint` = offset sendi ruang src (sama dengan LAM1 / `kin`), `mask` bit `bus*11 + slot` = sendi yang dikendalikan;
+  sendi lain tetap pada nilai saat masuk mode 820.
+* Hanya diterima dari **READY** (atau saat sudah 820). Mode lain: diabaikan + LOG (maks tiap 2 s).
+* Setiap pesan dicek terhadap batas sendi (+ trim); satu sendi di luar batas → seluruh pesan ditolak, pose lama dipertahankan.
+* Kecepatan dibatasi slew output (`servoStep`), deteksi jatuh aktif.
+* `ttlMs` ≤ 1000; kirim ulang lebih cepat dari ttl (studio: 20 Hz, ttl 300–400 ms). Habis / `ttlMs = 0` → ramp ke HOME → READY.
+* Kemampuan diiklankan `HELLO.caps` bit 7 (`CAP_LIVE_POSE`).
 
 ### 3.4 Blackbox SD
 
