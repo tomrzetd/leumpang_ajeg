@@ -39,6 +39,8 @@ jobs:
           - { target: esp32p4, idf: v5.5.1 }
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       - name: Build firmware
         uses: espressif/esp-idf-ci-action@v1
         with:
