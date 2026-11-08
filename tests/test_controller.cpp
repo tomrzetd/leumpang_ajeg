@@ -143,7 +143,7 @@ int main() {
     Motion back{};
     CHECK(motionDecode(blob, blen, back) == MotionError::OK && back.f[0].joint[0][4] == -800 && !strcmp(back.name, "uji"),
           "LAM1 encode/decode roundtrip");
-    blob[30] ^= 1; CHECK(motionDecode(blob, blen, back) == MotionError::CRC, "LAM1 CRC rusak ditolak"); blob[30] ^= 1;
+    blob[30] ^= 1; CHECK(motionDecode(blob, blen, back) == MotionError::BAD_CRC, "LAM1 CRC rusak ditolak"); blob[30] ^= 1;
     CHECK(ctrl.motions().load(0, blob, blen), "motion dimuat ke slot 0");
     c = Command{}; c.type = CmdType::MOTION_PLAY; c.slot = 0; box.c.push_back(c);
     step(1); CHECK(T().mode == Mode::MOTION_PLAY && ctrl.motions().state(0) == MotionStore::PLAYING, "MOTION_PLAY dari READY");

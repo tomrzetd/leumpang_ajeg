@@ -1,4 +1,4 @@
 [submodule "firmware/third_party/esp-hosted-mcu"]
-	path = firmware/third_party/esp-hosted-mcu
+	path = firmware/third_party/esp_hosted
 	url = https://github.com/espressif/esp-hosted-mcu.git
 	shallow = true

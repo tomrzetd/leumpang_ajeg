@@ -1,0 +1,14 @@
+menu "Leumpang Ajeg: shim Kconfig esp_hosted"
+    config ESP_HOSTED_HOST_USB_CDC_ACM_MANIFEST
+        bool
+        default n
+    config ESP_HOSTED_HOST_USB_CHERRYUSB_MANIFEST
+        bool
+        default n
+    config ESP_HOSTED_HOST_USB_RNDIS_MANIFEST
+        bool
+        default n
+    config ESP_HOSTED_CP_TINYUSB_MANIFEST
+        bool
+        default n
+endmenu

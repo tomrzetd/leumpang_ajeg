@@ -6,12 +6,13 @@ dependencies:
   # esp_hosted 2.13.1 dari submodule (git submodule update --init): resolver registry ikut
   # mengevaluasi manifest esp_hosted 3.x yang memakai aturan $CONFIG dan gagal di IDF 5.4/5.5.
   # Firmware ESP32-C6 (slave) harus dibangun dari versi esp_hosted yang sama (v2.13.1).
+  # ESP32-P4 butuh ESP-IDF >= 5.5 (manajer komponen lama tidak bisa membaca aturan $CONFIG).
   espressif/esp_wifi_remote:
     version: "1.6.5"
     rules:
       - if: "target in [esp32p4]"
   espressif/esp_hosted:
     version: "2.13.1"
-    override_path: "../../third_party/esp-hosted-mcu"
+    override_path: "../../third_party/esp_hosted"
     rules:
       - if: "target in [esp32p4]"

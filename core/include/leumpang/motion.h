@@ -37,7 +37,7 @@ struct Motion {
     MotionFrame f[MOTION_MAX_FRAMES];
 };
 
-enum class MotionError : uint8_t { OK, SIZE, MAGIC, VERSION, FRAMES, CRC, DURATION, INTERP };
+enum class MotionError : uint8_t { OK, SIZE, MAGIC, VERSION, FRAMES, BAD_CRC, DURATION, INTERP };
 const char* motionErrorName(MotionError e);
 
 // Dekode + validasi struktur (bukan batas sendi; itu dicek controller saat play).

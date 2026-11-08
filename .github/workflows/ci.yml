@@ -35,7 +35,6 @@ jobs:
         include:
           - { target: esp32s3, idf: v5.3.2 }
           - { target: esp32s3, idf: v5.4.1 }
-          - { target: esp32p4, idf: v5.4.1 }
           - { target: esp32p4, idf: v5.5.1 }
     steps:
       - uses: actions/checkout@v4
@@ -55,3 +54,25 @@ jobs:
             firmware/esp/build/bootloader/bootloader.bin
             firmware/esp/build/partition_table/partition-table.bin
             firmware/esp/build/flash_args
+
+  firmware-stm32:
+    name: Firmware STM32H562 (arm-none-eabi-gcc)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: carlosperate/arm-none-eabi-gcc-action@v1
+        with:
+          release: '13.3.Rel1'
+      - name: Configure
+        working-directory: firmware/stm32h562
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=cmake/arm-none-eabi.cmake
+      - name: Build
+        working-directory: firmware/stm32h562
+        run: cmake --build build -j
+      - uses: actions/upload-artifact@v4
+        with:
+          name: leumpang-stm32h562
+          path: |
+            firmware/stm32h562/build/*.bin
+            firmware/stm32h562/build/*.hex
+            firmware/stm32h562/build/*.elf

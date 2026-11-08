@@ -12,7 +12,7 @@ const char* motionErrorName(MotionError e) {
         case MotionError::MAGIC:    return "bukan LAM1";
         case MotionError::VERSION:  return "versi tidak didukung";
         case MotionError::FRAMES:   return "jumlah frame 1..64";
-        case MotionError::CRC:      return "CRC salah";
+        case MotionError::BAD_CRC:      return "CRC salah";
         case MotionError::DURATION: return "durasi frame 20..10000 ms";
         case MotionError::INTERP:   return "interpolasi tidak dikenal";
     }
@@ -31,7 +31,7 @@ MotionError motionDecode(const uint8_t* d, size_t n, Motion& m) {
     if (nf < 1 || nf > MOTION_MAX_FRAMES) return MotionError::FRAMES;
     const size_t need = MOTION_HDR_BYTES + (size_t)nf * MOTION_FRAME_BYTES + 2;
     if (n != need) return MotionError::SIZE;
-    if (lap::crc16(d, n - 2) != rd16(d + n - 2)) return MotionError::CRC;
+    if (lap::crc16(d, n - 2) != rd16(d + n - 2)) return MotionError::BAD_CRC;
     m.nFrames = nf;
     m.flags = rd16(d + 6);
     memcpy(m.name, d + 8, 16); m.name[16] = 0;
