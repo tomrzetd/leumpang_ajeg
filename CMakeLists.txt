@@ -22,7 +22,7 @@ if(LA_SANITIZE AND NOT MSVC)
 endif()
 
 set(LA_CORE_SRC core/src/controller.cpp core/src/lap.cpp core/src/lap_endpoint.cpp
-                core/src/lap_serial.cpp core/src/motion.cpp)
+                core/src/lap_serial.cpp core/src/motion.cpp core/src/icm20948.cpp)
 
 # ---- core ----------------------------------------------------------------
 add_library(leumpang_core STATIC ${LA_CORE_SRC})
@@ -39,7 +39,7 @@ endif()
 
 # ---- tes ------------------------------------------------------------------
 enable_testing()
-foreach(t test_lap test_controller)
+foreach(t test_lap test_controller test_imu)
   add_executable(${t} tests/${t}.cpp)
   target_include_directories(${t} PRIVATE tests)
   target_link_libraries(${t} PRIVATE leumpang_core)

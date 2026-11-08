@@ -3,11 +3,13 @@ dependencies:
   # Hapus baris berikut + set APP_USE_MDNS 0 di app_config.h bila tidak butuh leumpang-ajeg.local
   espressif/mdns: "^1.4"
   # ESP32-P4 tidak punya radio: Wi-Fi lewat ESP32-C6 on-board (SDIO) - API esp_wifi tetap sama
+  # Versi dipin persis: esp_hosted 3.x memakai aturan $CONFIG yang membuat resolver
+  # IDF 5.4/5.5 gagal. Firmware C6 (slave) harus versi esp_hosted yang sama: 2.13.1.
   espressif/esp_wifi_remote:
-    version: ">=0.10"
+    version: "1.6.5"
     rules:
       - if: "target in [esp32p4]"
   espressif/esp_hosted:
-    version: "^2.4"
+    version: "2.13.1"
     rules:
       - if: "target in [esp32p4]"
