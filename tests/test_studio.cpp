@@ -4,6 +4,8 @@
 #include "motion_doc.h"
 #include "pose_decode.h"
 #include "retarget.h"
+#include "lap_client.h"
+#include "sim_robot.h"
 
 #include "leumpang/controller.h"
 #include "check.h"
@@ -281,5 +283,43 @@ int main() {
     Keypoint dk[KP_COUNT]; decodeMoveNet(out, lb, dk);
     CHECK(std::fabs(dk[16].x - 420) < 0.01f && std::fabs(dk[16].y - 210) < 0.01f && lb.padY > 0 && lb.padX == 0,
           "letterbox + dekode MoveNet kembali ke koordinat gambar");
+
+    // ================= LapClient <-> SimRobot (jalur studio tanpa hardware) =================
+    {
+        static SimRobot sim; static LapClient cli; std::vector<uint8_t> toSim;
+        cli.write = [&](const uint8_t* d, size_t n) { toSim.insert(toSim.end(), d, d + n); };
+        sim.start([](const uint8_t* d, size_t n) { cli.feed(d, n); });
+        auto run = [&](int cycles) {
+            for (int i = 0; i < cycles; ++i) {
+                if (!toSim.empty()) { std::vector<uint8_t> b; b.swap(toSim); sim.fromHost(b.data(), b.size()); }
+                sim.advance(1);
+                if (i % 100 == 0) cli.ping();
+            }
+        };
+        cli.begin(LapClient::Rates{});
+        run(250);
+        CHECK(cli.haveHello && cli.hello.board == lap::BOARD_SIM && (cli.hello.caps & lap::CAP_LIVE_POSE) &&
+              cli.haveTele && cli.haveServo && cli.haveGait && cli.haveConfig, "studio<->sim: HELLO, telemetry, servo, gait, config");
+        CHECK(cli.tele.mode == (uint16_t)Mode::READY, "sim boot -> READY");
+        JointSrc gs; cli.gaitSrc(gs);
+        Telemetry st; sim.controller().snapshot(st); JointSrc cs; kinToSrc(st.kin, cs);
+        CHECK(!memcmp(gs, cs, sizeof gs), "GAIT_STATE kin -> [bus][slot] sama dengan controller");
+        int16_t fbSrc = rawToSrc(0, 1, cli.servo.fb[0][1], cli.servo.trim[0][1]);
+        CHECK(std::abs(fbSrc - (-2700)) < 150, "feedback servo -> src (bahu R ~ HOME)");
+        const std::vector<uint8_t> lam2 = back.toLam(&err);
+        cli.motionUpload(1, lam2.data(), lam2.size(), false);
+        run(5);
+        CHECK(cli.motions.state[1] == 2 && !strcmp(cli.motions.name[1], "uji-studio"), "unggah LAM lewat LapClient -> slot 1 READY");
+        cli.motionPlay(1, true); run(3);
+        CHECK(cli.tele.mode == (uint16_t)Mode::MOTION_PLAY, "MOTION_PLAY lewat LapClient");
+        run(200);
+        int16_t pose[2][SERVO_SLOTS]; memcpy(pose, home, sizeof pose); pose[1][4] = -700;
+        for (int i = 0; i < 6; ++i) { cli.poseTarget(pose, 1u << (11 + 4), 300); run(10); }
+        cli.gaitSrc(gs);
+        CHECK(cli.tele.mode == (uint16_t)Mode::LIVE_POSE && gs[1][4] == -700, "POSE_TARGET lewat LapClient -> LIVE_POSE");
+        int logs = 0; cli.onLog = [&](const std::string&) { ++logs; };
+        cli.cmd(lap::CMD_RESET); run(150);
+        CHECK(cli.tele.mode == (uint16_t)Mode::READY && logs > 0, "CMD_RESET -> READY, LOG diterima");
+    }
     return checkSummary("test_studio");
 }

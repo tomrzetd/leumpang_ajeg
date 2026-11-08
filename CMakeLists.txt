@@ -31,7 +31,8 @@ target_compile_options(leumpang_core PRIVATE ${LA_WARN} ${LA_SAN})
 target_link_options(leumpang_core PUBLIC ${LA_SAN})
 
 # ---- pustaka studio tanpa Qt (FK twin, retarget, dokumen gerak) ----------
-add_library(leumpang_studio_lib STATIC studio/lib/kinematics.cpp studio/lib/retarget.cpp studio/lib/motion_doc.cpp)
+add_library(leumpang_studio_lib STATIC studio/lib/kinematics.cpp studio/lib/retarget.cpp studio/lib/motion_doc.cpp
+            studio/lib/lap_client.cpp studio/lib/sim_robot.cpp)
 target_include_directories(leumpang_studio_lib PUBLIC studio/lib)
 target_link_libraries(leumpang_studio_lib PUBLIC leumpang_core)
 target_compile_options(leumpang_studio_lib PRIVATE ${LA_WARN} ${LA_SAN})
