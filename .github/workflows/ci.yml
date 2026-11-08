@@ -125,6 +125,8 @@ jobs:
   studio-windows:
     name: Studio desktop (Windows x64, Qt 6.8)
     runs-on: windows-2022
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: jurplel/install-qt-action@v4
@@ -166,3 +168,14 @@ jobs:
         with:
           name: studio-selftest-windows
           path: studio-shots-win
+      - name: Tangkapan layar -> cabang ci-shots-win
+        if: always() && github.event_name == 'push'
+        shell: bash
+        run: |
+          [ -d studio-shots-win ] || exit 0
+          git config user.name "leumpang-ci"; git config user.email "ci@users.noreply.github.com"
+          mkdir -p ../shots && cp -r studio-shots-win/. ../shots/
+          git checkout -q --orphan ci-shots-tmp
+          git rm -rfq . >/dev/null
+          cp -r ../shots/. . && git add -A
+          git commit -qm "selftest studio ${GITHUB_SHA::7} (windows)" && git push -f origin HEAD:ci-shots-win

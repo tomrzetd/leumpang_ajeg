@@ -35,8 +35,8 @@ static void messageHandler(QtMsgType t, const QMessageLogContext& c, const QStri
 int main(int argc, char** argv) {
     QGuiApplication::setApplicationName(QStringLiteral("Leumpang Studio"));
     QGuiApplication::setOrganizationName(QStringLiteral("leumpang-ajeg"));
-    QSurfaceFormat::setDefaultFormat(QQuick3D::idealSurfaceFormat(4));
     QGuiApplication app(argc, argv);
+    QSurfaceFormat::setDefaultFormat(QQuick3D::idealSurfaceFormat(4));   // setelah app: memeriksa konteks GL
     QQuickStyle::setStyle(QStringLiteral("Material"));
 
     QString selftestDir;
