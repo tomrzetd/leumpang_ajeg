@@ -1,0 +1,18 @@
+menu "Leumpang Ajeg"
+
+    # Manifest esp_hosted di registry (sejak Nov 2026) memasang dependensi USB host dengan
+    # aturan "$CONFIG{ESP_HOSTED_HOST_USB_*_MANIFEST} == 1". Tanpa definisi opsi ini,
+    # konfigurasi IDF gagal: "Missing required kconfig option after retry".
+    # P4 bicara ke C6 lewat SDIO, bukan USB, jadi semuanya 0 (dependensi USB tidak dipasang).
+    # Harus bertipe int: nilai bool ditolak ("Invalid boolean '1'").
+    config ESP_HOSTED_HOST_USB_CDC_ACM_MANIFEST
+        int
+        default 0
+    config ESP_HOSTED_HOST_USB_RNDIS_MANIFEST
+        int
+        default 0
+    config ESP_HOSTED_HOST_USB_CHERRYUSB_MANIFEST
+        int
+        default 0
+
+endmenu
