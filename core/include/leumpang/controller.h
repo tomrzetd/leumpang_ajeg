@@ -132,6 +132,10 @@ private:
     static int16_t* srcOf(ServoPositions& v, uint8_t b, uint8_t s);
     // ---- Fase 3: refleks rintangan ----
     bool obstacleBlocked() const;
+    // ---- Fase 4B: stik ----
+    void padInput(const PadState& p);
+    void padWatchdog();
+    void padRelease(const char* why);
     // ---- Fase 4A: alat servo ICS ----
     void toolCommand(const Command& c);
     void toolStep(ServoBus& bus);
@@ -142,6 +146,12 @@ private:
 
     Platform       plat_{};
     Options        opt_{};
+    // Fase 4B: stik
+    PadState       pad_{};
+    bool           padOn_ = false, padDriving_ = false;
+    uint32_t       padPrev_ = 0;
+    int64_t        padLastUs_ = 0, padSinceUs_ = 0;
+    uint8_t        padRumble_ = 0;
     // Fase 4A: TOOL (satu operasi tertunda; SCAN berjalan 32 siklus)
     Command        toolPend_{};
     bool           toolHas_ = false;

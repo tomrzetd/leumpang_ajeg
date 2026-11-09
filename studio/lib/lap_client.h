@@ -19,6 +19,7 @@ public:
     std::function<void(const lap::Packet&)> onFileReply;      // FILE_ENTRIES / FILE_DATA / FILE_RESULT
     struct ToolResult { uint8_t req, op, status, bus, id; int32_t value; uint8_t len; uint8_t data[64]; };
     std::function<void(const ToolResult&)> onToolResult;      // SERVO_TOOL_RESULT
+    std::function<void(const PadFeedback&)> onPadFeedback;    // PAD_FEEDBACK (studio bertindak sebagai radio)
 
     struct Rates { uint8_t teleHz = 20, servoHz = 20, gaitHz = 30, logOn = 1; };
 
@@ -45,6 +46,8 @@ public:
     void fileRename(uint8_t req, const char* from, const char* to);
     static constexpr size_t FILE_CHUNK = 160;
     // alat servo ICS (Fase 4A, mode 830). op = la::ToolOp.
+    // Fase 4B: kirim status stik (studio/PC sebagai radio; robot asli memakai board radio)
+    void sendPad(const PadState& p);
     void servoTool(uint8_t req, uint8_t op, uint8_t bus = 0, uint8_t id = 0, uint8_t sc = 0, uint8_t arg = 0);
 
     // state terakhir dari robot

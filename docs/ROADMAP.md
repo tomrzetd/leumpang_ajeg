@@ -62,7 +62,12 @@ stik **PS4 lewat ESP32 klasik** (Bluepad32), Wi-Fi hanya untuk desktop, HP hanya
   * Alat servo ICS 3.5 (mode 830, `SERVO_TOOL`): scan ID, baca/tulis ID, stretch/speed/batas arus/suhu, baca EEPROM, posisi.
   * `lapctl`: `ls/get/put/rm/mkdir/mv`, `profile get|put`, `servo scan|id|setid|get|set|eeprom|pos`.
   * Teruji: profil 19 cek, studio/LAP 68 cek, Python lintas-bahasa (lapctl lawan `leumpang_sim --sd`).
-* **4B** Leumpang Radio: ESP32 klasik + Bluepad32, pesan PAD, pemetaan PS4 (L1 deadman, touchpad/PS = E-STOP), jembatan Wi-Fi untuk STM32.
+* **4B ✅ (kode + simulasi + build CI; ⏳ uji dengan stik)** — core 0.10.0 — Leumpang Radio ([RADIO.md](RADIO.md))
+  * Firmware radio **ESP32 klasik** (WROOM-32 / PICO-D4) dan **Pico 2 W** (juga Pico W), Bluepad32 4.2.0, kode bersama.
+  * LAP `PAD` 50 Hz / `PAD_FEEDBACK` (lightbar per mode, getar saat jatuh). UART radio di P4 (UART3), STM32 (USART1), S3 (opsional).
+  * Pemetaan di core: PS/touchpad = E-STOP, L1 deadman, X = GO, stik = jalan/belok, segitiga/kotak/d-pad = motion 0..5.
+  * `lapctl pad` (PC sebagai radio). Teruji: 17 cek skenario stik di simulator + uji lintas-bahasa.
+  * Berikutnya: jembatan Wi-Fi lewat board radio untuk STM32.
 * **4C** MicroPython tertanam + modul `leumpang` + `autorun.py` + Run/Stop/konsol dari desktop.
 * **4D** Studio v2: pengelola berkas, wizard kalibrasi, editor skrip, editor node (→ MicroPython), simulasi gait realtime, profil dari robot.
 * **4E** Indra HP (rintangan, orang, isyarat, suara) bisa dibaca skrip.

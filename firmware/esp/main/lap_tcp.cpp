@@ -41,9 +41,7 @@ void lapTask(void*) {
     la::lap::Hello self;
     self.role = la::lap::ROLE_ROBOT; self.board = LA_BOARD_ID;
     self.fwMajor = la::CORE_VER_MAJOR; self.fwMinor = la::CORE_VER_MINOR; self.fwPatch = la::CORE_VER_PATCH;
-    self.caps = la::lap::CAP_WIFI | la::lap::CAP_LCD | la::lap::CAP_MOTION | la::lap::CAP_GAIT_INTENT | la::lap::CAP_LIVE_POSE | la::lap::CAP_PERCEPTION | la::lap::CAP_SERVO_TOOL |
-                (storage_files() ? (uint32_t)(la::lap::CAP_FILES | la::lap::CAP_PROFILE) : 0u) |
-                (storage_sd_ok() ? (uint32_t)la::lap::CAP_SD : 0u);
+    self.caps = lap_self_caps();
     strncpy(self.name, LA_BOARD_NAME, 16);
     la::lap::LapEndpoint::Host h;
     h.write = epWrite; h.submit = epSubmit; h.snapshot = epSnapshot; h.savedGen = epSaved;
@@ -94,6 +92,14 @@ void lapTask(void*) {
 }
 
 }  // namespace
+
+uint32_t lap_self_caps() {
+    return la::lap::CAP_WIFI | la::lap::CAP_LCD | la::lap::CAP_MOTION | la::lap::CAP_GAIT_INTENT |
+           la::lap::CAP_LIVE_POSE | la::lap::CAP_PERCEPTION | la::lap::CAP_SERVO_TOOL |
+           (LA_RADIO_UART >= 0 ? (uint32_t)la::lap::CAP_PAD : 0u) |
+           (storage_files() ? (uint32_t)(la::lap::CAP_FILES | la::lap::CAP_PROFILE) : 0u) |
+           (storage_sd_ok() ? (uint32_t)la::lap::CAP_SD : 0u);
+}
 
 void lap_forward_log(const char* line) {
     if (!s_logQ || !line) return;

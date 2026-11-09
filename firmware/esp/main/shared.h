@@ -81,6 +81,9 @@ NetStatus net_status_get();
 void      wifi_set_sta(const char* ssid, const char* pass);
 void      lap_tcp_start();                 // server LAP TCP :5760 (lap_tcp.cpp)
 void      lap_forward_log(const char* line);
+uint32_t  lap_self_caps();                 // CAP_* bersama TCP & radio (lap_tcp.cpp)
+void      radio_start();                   // UART Leumpang Radio (radio_uart.cpp), Fase 4B
+bool      radio_active();                  // PAD diterima < 1 s lalu
 
 // ---- Persistensi (main.cpp) ------------------------------------------------
 bool     persist_load_cfg(RuntimeConfig* cfg, int16_t trim[2][SERVO_SLOTS]);

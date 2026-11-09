@@ -169,6 +169,7 @@ extern "C" void app_main(void) {
     if (!control_start()) logPrintf("GAGAL membuat task kontrol!\r\n");
     web_start();
     lap_tcp_start();
+    radio_start();                        // Leumpang Radio (stik PS4) di UART, bila board punya UART bebas
     local_ui_start();
     xTaskCreatePinnedToCore(serviceTask, "Service", STACK_SERVICE, nullptr, PRIO_SERVICE, nullptr, CORE_SYSTEM);
 }

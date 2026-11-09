@@ -4,6 +4,7 @@
 // =============================================================================
 #pragma once
 #include <stdint.h>
+#include "leumpang/pad.h"
 #include <stddef.h>
 
 // printf-format check (GCC/Clang); kosong di MSVC (studio Windows)
@@ -16,7 +17,7 @@
 namespace la {
 
 // ---- Versi ----------------------------------------------------------------
-constexpr uint8_t CORE_VER_MAJOR = 0, CORE_VER_MINOR = 9, CORE_VER_PATCH = 0;
+constexpr uint8_t CORE_VER_MAJOR = 0, CORE_VER_MINOR = 10, CORE_VER_PATCH = 0;
 
 // ---- Servo ICS 3.5 ----------------------------------------------------------
 constexpr uint32_t ICS_BAUD     = 1250000;   // 8E1
@@ -107,7 +108,7 @@ struct ServoPositions {
 
 // ---- Perintah -------------------------------------------------------------
 enum class CmdType : uint8_t { RESET, GO, STOP, CALIBRATE, SET_PARAM, SET_TRIM,
-                               GAIT_INTENT, MOTION_PLAY, MOTION_STOP, POSE_TARGET, PERCEPTION, SERVO_TOOL };
+                               GAIT_INTENT, MOTION_PLAY, MOTION_STOP, POSE_TARGET, PERCEPTION, SERVO_TOOL, PAD };
 enum class ParamId : uint8_t {
     FALL_DEG, REARM_DEG, IMU_STALE_MS, SERVO_STEP, TRIGGER_ROLL_DEG,
     TRIGGER_PITCH_DEG, FOOT_LIFT, SWAY_BASE, SWAY_GAIN, SIGN_ROLL,
@@ -123,6 +124,7 @@ struct Command {
     uint32_t poseMask;      // POSE_TARGET: bit (bus*11+slot) = sendi dikendalikan
     int16_t  pose[2][SERVO_SLOTS];   // POSE_TARGET: offset sendi (ruang src)
     uint8_t  toolOp, toolId, toolSc, toolArg, toolReq;   // SERVO_TOOL (bus = bus)
+    PadState pad;                    // PAD (Fase 4B)
 };
 
 // ---- Fase 4A: alat servo ICS 3.5 (mode TOOL) ---------------------------------
@@ -178,6 +180,10 @@ struct Telemetry {
     uint8_t  toolReq, toolOp, toolStatus, toolBus, toolId, toolLen;
     int32_t  toolValue;
     uint8_t  toolData[64];
+    // Fase 4B: stik
+    PadState pad;
+    bool     padOn;                  // tersambung & segar
+    uint8_t  padRumble;              // naik saat jatuh / E-STOP (radio menggetarkan stik)
 };
 
 // ---- Utilitas -------------------------------------------------------------

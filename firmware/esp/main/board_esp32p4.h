@@ -24,6 +24,16 @@ constexpr int IMU_SDA = 7, IMU_SCL = 8;   // header I2C board
 #define ICM_INT_GPIO -1
 #endif
 
+// ---- Leumpang Radio (Fase 4B): UART3 ke board radio (ESP32 klasik / Pico 2 W) ----
+//  P4 TX -> RX radio, P4 RX <- TX radio, GND bersama. 3,3 V. VERIFIKASI pin header board Anda.
+#ifndef LA_RADIO_TX
+#define LA_RADIO_TX 46
+#endif
+#ifndef LA_RADIO_RX
+#define LA_RADIO_RX 47
+#endif
+#define LA_RADIO_UART 3
+
 constexpr int LCD_SCK = 28, LCD_MOSI = 29, LCD_CS = 30, LCD_DC = 32, LCD_RST = 33;
 
 // ---- SD card: slot TF on-board ---------------------------------------------
@@ -40,6 +50,9 @@ constexpr int SD_LDO_CHAN = 4;            // LDO internal untuk domain IO SD (se
 constexpr int BOARD_USED_PINS[] = {
     PIN_RGB, PIN_T2, BUS_R_TX, BUS_R_RX, BUS_L_TX, BUS_L_RX, BUS_R_EN, BUS_L_EN,
     IMU_SDA, IMU_SCL, LCD_SCK, LCD_MOSI, LCD_CS, LCD_DC, LCD_RST,
+#if LA_RADIO_TX >= 0
+    LA_RADIO_TX, LA_RADIO_RX,
+#endif
 #if ICM_INT_GPIO >= 0
     ICM_INT_GPIO,
 #endif

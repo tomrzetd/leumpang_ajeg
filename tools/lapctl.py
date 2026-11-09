@@ -20,6 +20,11 @@ Berkas SD & profil robot (Fase 4A):
   lapctl.py --tcp 192.168.4.1 profile get robot.json      (unduh /config/robot.json)
   lapctl.py --tcp 192.168.4.1 profile put robot.json      (unggah, lalu: cmd reboot)
 
+Stik tanpa board radio (uji; PC bertindak sebagai radio, 50 Hz):
+  lapctl.py --tcp 127.0.0.1 pad --secs 2                 (sambungkan stik virtual)
+  lapctl.py --tcp 127.0.0.1 pad l1 x --secs 1            (L1+X = GO)
+  lapctl.py --tcp 127.0.0.1 pad l1 --ly 80 --secs 3      (L1 + stik kiri maju)
+
 Alat servo ICS 3.5 (robot harus FALLEN: cmd stop dulu, robot di stand):
   lapctl.py --tcp 192.168.4.1 servo scan
   lapctl.py --tcp 192.168.4.1 servo get R 3 stretch
@@ -95,6 +100,33 @@ def file_cmd(link: lap.Link, a) -> int:
     except (IOError, TimeoutError, ValueError) as e:
         print("gagal:", e, file=sys.stderr)
         return 1
+    return 0
+
+
+def pad_cmd(link: lap.Link, a) -> int:
+    import time
+    try:
+        btn = 0
+        for b in a.buttons:
+            btn |= lap.PAD_BUTTONS[b.lower()]
+    except KeyError as e:
+        print("tombol tak dikenal:", e, "- pilihan:", " ".join(sorted(lap.PAD_BUTTONS)), file=sys.stderr)
+        return 2
+    seq, end, fb = 0, time.time() + a.secs, None
+    # tombol baru dianggap "ditekan" bila sebelumnya lepas: kirim 0,15 s tanpa tombol dulu
+    t_press = time.time() + a.press_after
+    while time.time() < end:
+        now = time.time()
+        b = btn if now >= t_press else (btn & lap.PAD_BUTTONS["l1"])
+        link.send(lap.PAD, lap.pk_pad(b, a.lx, a.ly, a.rx, a.ry, seq=seq))
+        seq += 1
+        for p in link.recv(0.02):
+            if p.type == lap.PAD_FEEDBACK and len(p.body) >= 7:
+                fb = tuple(p.body[:7])
+            elif p.type == lap.LOG:
+                print(p.body.decode(errors="replace").rstrip())
+    if fb:
+        print(f"lightbar rgb=({fb[0]},{fb[1]},{fb[2]}) getar={fb[3] * 10} ms")
     return 0
 
 
@@ -192,6 +224,12 @@ def main() -> int:
     sv = sub.add_parser("servo", help="alat servo ICS 3.5 (mode 830)")
     sv.add_argument("action", choices=["enter", "exit", "scan", "id", "setid", "get", "set", "eeprom", "pos"])
     sv.add_argument("args", nargs="*", help="bus (R/L/0/1), id, parameter (stretch/speed/current/temp), nilai")
+    pd = sub.add_parser("pad", help="kirim status stik 50 Hz (uji tanpa board radio)")
+    pd.add_argument("buttons", nargs="*", help="l1 x o square triangle options ps touch up down ...")
+    pd.add_argument("--lx", type=int, default=0); pd.add_argument("--ly", type=int, default=0)
+    pd.add_argument("--rx", type=int, default=0); pd.add_argument("--ry", type=int, default=0)
+    pd.add_argument("--secs", type=float, default=1.0)
+    pd.add_argument("--press-after", type=float, default=0.15, help="detik sebelum tombol ditekan (L1 sejak awal)")
     a = ap.parse_args()
 
     link = lap.Link(tcp=a.tcp, serial_port=a.serial)
@@ -232,6 +270,8 @@ def main() -> int:
         return file_cmd(link, a)
     if a.cmd == "servo":
         return servo_cmd(link, a)
+    if a.cmd == "pad":
+        return pad_cmd(link, a)
     if a.cmd == "motion-upload":
         blob = open(a.file, "rb").read()
         name, frames, _ = lap.decode_motion(blob)

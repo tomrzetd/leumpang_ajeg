@@ -353,6 +353,7 @@ void Controller::enterFallen(const char* why) {
     gaitOfsActive_ = false; intentDeadlineUs_ = 0;
     walk_.mode = Mode::FALLEN;
     walk_.fallCt = 0; walk_.uprightCt = 0; freeTick_ = 0;
+    ++padRumble_; padDriving_ = false;
     logf("\r\n!!! %s - SERVO FREE. Tegakkan robot lalu tekan 'r'.\r\n", why);
 }
 void Controller::startReset(const char* why, int16_t cycles) {
@@ -792,6 +793,7 @@ void Controller::handleCommand(const Command& c) {
             if (walk_.mode == Mode::MOTION_PLAY) motionEnd(false, "dihentikan");
             break;
         case CmdType::SERVO_TOOL: toolCommand(c); break;
+        case CmdType::PAD: padInput(c.pad); break;
     }
 }
 
@@ -818,6 +820,7 @@ void Controller::step(const ImuInput& imuIn, ServoBus& bus, Inbox& inbox) {
     for (uint8_t n = 0; n < 16 && inbox.nextKey(k); ++n) handleKey(k);
     Command c;
     for (uint8_t n = 0; n < 12 && inbox.nextCommand(c); ++n) handleCommand(c);
+    padWatchdog();
     if (fallCheckMode(walk_.mode)) detAng();
     walkControl();
     if (!walkStateFinite()) { initWalkState(); startReset("nilai NaN/Inf pada state jalan"); }
@@ -866,9 +869,77 @@ void Controller::snapshot(Telemetry& t) const {
     t.intentVx = gaitStride_; t.intentYawDeg = gaitYaw_ * kRad2Deg;
     t.motionSlot = motSlot_; t.motionFrame = motFrame_;
     t.blackboxDropped = bb_ ? bb_->dropped() : 0;
+    t.pad = pad_; t.padOn = padOn_; t.padRumble = padRumble_;
     t.toolSeq = toolSeq_; t.toolReq = toolReq_; t.toolOp = toolOp_; t.toolStatus = toolStatus_;
     t.toolBus = toolBus_; t.toolId = toolId_; t.toolLen = toolLen_; t.toolValue = toolValue_;
     memcpy(t.toolData, toolData_, sizeof(toolData_));
+}
+
+// ============================================================================
+//  Fase 4B: stik (Leumpang Radio). Pemetaan bawaan - docs/RADIO.md:
+//   PS / klik touchpad   E-STOP kapan saja (servo free), kecuali 1 s pertama setelah sambung
+//   L1 ditahan           deadman: tanpa L1 tidak ada gerak; lepas L1 = gait berhenti
+//   L1 + Options         reset / berdiri (dari FALLEN)
+//   L1 + X               GO (READY -> BALANCE)
+//   L1 + stik kiri Y     maju/mundur (GAIT_INTENT, butuh gaitEnable=1); stik kanan X = belok
+//   L1 + segitiga/kotak  motion slot 0 / 1; L1 + d-pad atas/kanan/bawah/kiri = slot 2..5
+//   L1 + O               hentikan motion
+//  Stik hilang (> 250 ms tanpa PAD) atau terputus: gait berhenti, robot tidak dijatuhkan.
+// ============================================================================
+void Controller::padRelease(const char* why) {
+    if (padDriving_) {
+        gaitTgtStride_ = 0; gaitTgtYaw_ = 0;
+        if (walk_.mode == Mode::WALK_CONT) intentDeadlineUs_ = now();
+        if (why) logf("PAD: %s - gait berhenti\r\n", why);
+    }
+    padDriving_ = false;
+}
+
+void Controller::padWatchdog() {
+    if (padOn_ && now() - padLastUs_ > (int64_t)PAD_TIMEOUT_MS * 1000) {
+        padOn_ = false;
+        padRelease("sinyal stik hilang");
+        logf("PAD: stik hilang (tanpa laporan %u ms)\r\n", (unsigned)PAD_TIMEOUT_MS);
+    }
+}
+
+void Controller::padInput(const PadState& p) {
+    const int64_t t = now();
+    pad_ = p; padLastUs_ = t;
+    if (!(p.flags & PAD_CONNECTED)) {
+        if (padOn_) { padRelease("stik terputus"); logf("PAD: stik terputus\r\n"); }
+        padOn_ = false;
+        return;
+    }
+    if (!padOn_) {                       // (ter)sambung: tombol yang sedang ditekan bukan "tekan baru"
+        padOn_ = true; padPrev_ = p.buttons; padSinceUs_ = t;
+        logf("PAD: stik aktif (baterai %u)\r\n", (unsigned)p.battery);
+        return;
+    }
+    const uint32_t down = p.buttons & ~padPrev_;
+    padPrev_ = p.buttons;
+    if ((down & (PAD_PS | PAD_TOUCH)) && t - padSinceUs_ > (int64_t)PAD_ARM_DELAY_MS * 1000) {
+        padRelease(nullptr);
+        enterFallen("E-STOP dari stik");
+        return;
+    }
+    if (!(p.buttons & PAD_L1)) { padRelease("L1 dilepas"); return; }
+
+    if (down & PAD_OPTIONS) manualReset("stik L1+Options");
+    if (down & PAD_CROSS) cmdGo();
+    if ((down & PAD_CIRCLE) && walk_.mode == Mode::MOTION_PLAY) motionEnd(false, "stik L1+O");
+    static const uint32_t slotBtn[6] = {PAD_TRIANGLE, PAD_SQUARE, PAD_UP, PAD_RIGHT, PAD_DOWN, PAD_LEFT};
+    for (int i = 0; i < 6; ++i) if (down & slotBtn[i]) { motionStart(i); break; }
+
+    const auto axis = [](int8_t v) { return (v > PAD_DEADZONE || v < -PAD_DEADZONE) ? v / 127.0f : 0.0f; };
+    const float vx = axis(p.ly) * cfg_.gaitStepMax;
+    const float yawDeg = -axis(p.rx) * cfg_.gaitYawMaxRad * kRad2Deg;      // stik ke kanan = belok kanan
+    const bool walking = walk_.mode == Mode::WALK_CONT;
+    if (walking || (walk_.mode == Mode::BALANCE && (vx != 0.0f || yawDeg != 0.0f))) {
+        Command g{}; g.type = CmdType::GAIT_INTENT; g.value = vx; g.yawDeg = yawDeg; g.ttlMs = 300;
+        gaitIntent(g);
+        padDriving_ = walk_.mode == Mode::WALK_CONT;
+    }
 }
 
 // ============================================================================

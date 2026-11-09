@@ -22,6 +22,7 @@ GAIT_INTENT, PERCEPTION = 0x30, 0x31
 MOTION_BEGIN, MOTION_CHUNK, MOTION_END, MOTION_PLAY, MOTION_STATUS = 0x40, 0x41, 0x42, 0x43, 0x44
 POSE_TARGET = 0x45
 SERVO_TOOL, SERVO_TOOL_RESULT = 0x46, 0x47
+PAD, PAD_FEEDBACK = 0x50, 0x51
 SIM_IMU, SIM_FAULT = 0x70, 0x71
 FILE_LIST, FILE_READ, FILE_WRITE, FILE_DELETE, FILE_MKDIR, FILE_RENAME, FILE_STAT = range(0x80, 0x87)
 FILE_ENTRIES, FILE_DATA, FILE_RESULT = 0x88, 0x89, 0x8A
@@ -35,7 +36,7 @@ BOARDS = {0: "unknown", 1: "esp32s3", 2: "esp32p4", 3: "stm32h562", 4: "sim"}
 CMD_RESET, CMD_GO, CMD_STOP, CMD_CAL, CMD_GET_CONFIG, CMD_HELLO, CMD_MOTION_LIST, CMD_REBOOT = range(8)
 CMD_NAMES = {"reset": CMD_RESET, "go": CMD_GO, "stop": CMD_STOP, "cal": CMD_CAL, "config": CMD_GET_CONFIG,
              "motions": CMD_MOTION_LIST, "reboot": CMD_REBOOT}
-CAP_FILES, CAP_PROFILE, CAP_SERVO_TOOL = 1 << 10, 1 << 11, 1 << 12
+CAP_FILES, CAP_PROFILE, CAP_SERVO_TOOL, CAP_PAD = 1 << 10, 1 << 11, 1 << 12, 1 << 13
 
 # ---- Fase 4A: berkas SD & alat servo ICS ----
 FS_STATUS = {0: "OK", 1: "NOT_FOUND", 2: "IO", 3: "BAD_PATH", 4: "NO_SD", 5: "DENIED", 6: "EXISTS"}
@@ -44,6 +45,20 @@ TOOL_ENTER, TOOL_EXIT, TOOL_SCAN, TOOL_READ_ID, TOOL_WRITE_ID = 1, 2, 3, 4, 5
 TOOL_READ_PARAM, TOOL_WRITE_PARAM, TOOL_READ_EEPROM, TOOL_READ_POS = 6, 7, 8, 9
 TOOL_STATUS = {0: "OK", 1: "BAD_MODE", 2: "NO_REPLY", 3: "BAD_ARG", 4: "UNSUPPORTED", 5: "BUSY"}
 SC_NAMES = {"stretch": 1, "speed": 2, "current": 3, "temp": 4}
+
+# ---- Fase 4B: stik (core/include/leumpang/pad.h) ----
+PAD_BUTTONS = {"cross": 1 << 0, "x": 1 << 0, "circle": 1 << 1, "o": 1 << 1, "square": 1 << 2, "triangle": 1 << 3,
+               "l1": 1 << 4, "r1": 1 << 5, "l2": 1 << 6, "r2": 1 << 7, "share": 1 << 8, "options": 1 << 9,
+               "l3": 1 << 10, "r3": 1 << 11, "ps": 1 << 12, "touch": 1 << 13,
+               "up": 1 << 16, "down": 1 << 17, "right": 1 << 18, "left": 1 << 19}
+PAD_CONNECTED = 1
+
+
+def pk_pad(buttons: int = 0, lx: int = 0, ly: int = 0, rx: int = 0, ry: int = 0, l2: int = 0, r2: int = 0,
+           connected: bool = True, battery: int = 200, seq: int = 0) -> bytes:
+    c = lambda v: max(-127, min(127, int(v)))
+    return struct.pack("<BBIbbbbBBB", PAD_CONNECTED if connected else 0, battery, buttons,
+                       c(lx), c(ly), c(rx), c(ry), l2, r2, seq & 0xFF)
 
 # urutan = enum la::ParamId
 PARAMS = ["fallDeg", "rearmDeg", "imuStaleMs", "servoStep", "trigRollDeg", "trigPitchDeg",

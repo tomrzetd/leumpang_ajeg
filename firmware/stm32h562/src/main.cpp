@@ -159,7 +159,7 @@ int main() {
     g_link.init(io, h, self);                       // log tersedia sejak awal (USB mungkin belum enumerasi)
     const bool sd = storage_mount();
     h.files = storage_files();                      // FatFs; dipanggil dari main loop seperti operasi SD lain
-    self.caps = la::lap::CAP_USB_CDC | la::lap::CAP_MOTION | la::lap::CAP_GAIT_INTENT | la::lap::CAP_LIVE_POSE | la::lap::CAP_PERCEPTION | la::lap::CAP_SERVO_TOOL |
+    self.caps = la::lap::CAP_USB_CDC | la::lap::CAP_MOTION | la::lap::CAP_GAIT_INTENT | la::lap::CAP_LIVE_POSE | la::lap::CAP_PERCEPTION | la::lap::CAP_SERVO_TOOL | la::lap::CAP_PAD |
                 (sd ? (uint32_t)(la::lap::CAP_SD | la::lap::CAP_FILES | la::lap::CAP_PROFILE) : 0u);
     g_link.init(io, h, self);                       // ulang dengan caps final
     la_log_main("\r\n=== Leumpang Ajeg (%s) core %u.%u.%u - ketik '?' ===\r\n", LA_BOARD_NAME,
@@ -180,6 +180,7 @@ int main() {
     __HAL_RCC_TIM6_CLK_ENABLE();
     timerStart(TIM6, TIM6_IRQn, PRIO_CONTROL, la::CONTROL_PERIOD_MS * 1000);                       // 100 Hz
 
+    radio_init(h, self);                            // Leumpang Radio (stik PS4) di USART1
     uint8_t rx[64];
     uint32_t lastCfgCheck = 0, cfgStableSince = 0, lastGen = 0;
     for (;;) {
@@ -193,6 +194,7 @@ int main() {
         LogLine l;
         for (int i = 0; i < 8 && g_isrLog.pop(l); ++i) g_link.logLine(l.t);
         g_link.poll(ms);
+        radio_poll(ms);
         tud_cdc_write_flush();
         storage_service(ms);
 

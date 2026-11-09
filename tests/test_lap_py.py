@@ -216,6 +216,20 @@ def test_lapctl(sim_path):
         check(rc == 0 and out.count("\n") >= 4, "servo eeprom (64 nibble)")
         rc, _ = run("servo", "exit")
         check(rc == 0, "servo exit -> FALLEN")
+
+        # Fase 4B: stik virtual lewat lapctl pad
+        rc, out = run("pad", "l1", "options", "--secs", "2.5")
+        check(rc == 0 and "stik aktif" in out, "lapctl pad: stik aktif")
+        check("rgb=" in out, f"lapctl pad: PAD_FEEDBACK diterima ({out.strip().splitlines()[-1] if out.strip() else ''})")
+        rc, out = run("pad", "l1", "x", "--secs", "1.5")
+        check(rc == 0 and "mode=730" in out, "lapctl pad l1 x = GO (BALANCE)")
+        check("rgb=(0,0,80)" in out, "lightbar biru saat BALANCE")
+        time.sleep(0.6)                                         # > 250 ms: stik dianggap hilang
+        rc, out = run("pad", "touch", "--secs", "1")
+        check("stik aktif" in out and "E-STOP" not in out, "touchpad dalam 1 s pertama setelah sambung diabaikan")
+        time.sleep(0.6)
+        rc, out = run("pad", "touch", "--press-after", "1.3", "--secs", "2")
+        check("E-STOP dari stik" in out and "rgb=(80,0,0)" in out, "touchpad setelah 1 s = E-STOP, lightbar merah")
     finally:
         sim.terminate()
         try:

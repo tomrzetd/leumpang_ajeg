@@ -45,6 +45,12 @@ void LapClient::handle(const Packet& p) {
         case CONFIG:        haveConfig = parsePacket(p, config); break;
         case MOTION_STATUS: parsePacket(p, motions); break;
         case ACK:           parsePacket(p, lastAck); break;
+        case PAD_FEEDBACK:
+            if (p.len >= PAD_FEEDBACK_LEN && onPadFeedback) {
+                PadFeedback f{p.body[0], p.body[1], p.body[2], p.body[3], p.body[4], p.body[5], p.body[6]};
+                onPadFeedback(f);
+            }
+            break;
         case SERVO_TOOL_RESULT: {
             Reader r(p.body, p.len);
             ToolResult t{};
@@ -112,6 +118,10 @@ void LapClient::fileWrite(uint8_t req, uint32_t off, bool trunc, const char* pat
 void LapClient::fileSimple(uint8_t type, uint8_t req, const char* path) {
     Packet p; p.type = type; p.seq = seq_++; Writer w(p.body, MAX_BODY);
     w.u8(req); w.bytes(path, strlen(path)); p.len = (uint8_t)w.size(); sendPacket(p);
+}
+void LapClient::sendPad(const PadState& ps) {
+    Packet p; p.type = PAD; p.seq = seq_++;
+    padEncode(ps, p.body); p.len = PAD_BODY_LEN; sendPacket(p);
 }
 void LapClient::servoTool(uint8_t req, uint8_t op, uint8_t bus, uint8_t id, uint8_t sc, uint8_t arg) {
     Packet p; p.type = SERVO_TOOL; p.seq = seq_++; Writer w(p.body, MAX_BODY);

@@ -28,6 +28,7 @@ simulator, studio desktop dengan digital twin 3D, serta protokol bersama untuk H
 | **Leumpang Mata** (Android): hindari rintangan, ikuti orang, isyarat tangan, wajah/objek, suara | ✅ kode + CI; ⏳ uji di HP |
 | Refleks rintangan firmware (`PERCEPTION`) + Leumpang Bus API (`EXT`, WebSocket) | ✅ simulasi |
 | **Platform servo umum**: profil robot di SD, berkas SD lewat LAP, alat servo ICS 3.5 | ✅ simulasi (Fase 4A) |
+| **Stik PS4/PS5** lewat Leumpang Radio (ESP32 klasik / Pico 2 W) | ✅ simulasi + build (Fase 4B) — [RADIO.md](docs/RADIO.md) |
 
 Lihat [docs/ROADMAP.md](docs/ROADMAP.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
@@ -64,6 +65,7 @@ API antar-modul / sensor: [docs/BUS.md](docs/BUS.md).
 
 ```bash
 git clone --recursive https://github.com/tomrzetd/leumpang_ajeg.git
+# copy lama: git pull && git submodule update --init --recursive
 # sudah terlanjur clone tanpa --recursive:
 git submodule update --init --recursive
 ```

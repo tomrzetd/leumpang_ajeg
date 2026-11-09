@@ -58,8 +58,10 @@ esp_err_t gpio_install_isr_service(int); typedef void (*gpio_isr_t)(void*);
 esp_err_t gpio_isr_handler_add(gpio_num_t, gpio_isr_t, void*);
 // ---- UART ----
 typedef int uart_port_t;
+#define UART_NUM_0 0
 #define UART_NUM_1 1
 #define UART_NUM_2 2
+#define UART_NUM_3 3
 #define UART_PIN_NO_CHANGE (-1)
 typedef enum { UART_DATA_8_BITS = 3 } uart_word_length_t;
 typedef enum { UART_PARITY_DISABLE=0, UART_PARITY_EVEN=2 } uart_parity_t;

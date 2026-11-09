@@ -52,7 +52,7 @@ set(CORE ${CMAKE_CURRENT_LIST_DIR}/../../core)
 set(CORE_SRC ${CORE}/src/controller.cpp ${CORE}/src/lap.cpp ${CORE}/src/lap_endpoint.cpp
              ${CORE}/src/lap_serial.cpp ${CORE}/src/motion.cpp ${CORE}/src/icm20948.cpp ${CORE}/src/profile.cpp ${CORE}/src/files.cpp)
 
-set(APP_SRC src/main.cpp src/clock.cpp src/ics_bus.cpp src/imu.cpp src/storage.cpp
+set(APP_SRC src/main.cpp src/radio.cpp src/clock.cpp src/ics_bus.cpp src/imu.cpp src/storage.cpp
             src/sd_diskio.c src/usb_descriptors.c src/stm32_it.c src/syscalls.c)
 
 add_executable(leumpang_h562 ${APP_SRC} ${CORE_SRC} ${HAL_SRC} ${DEVICE_SRC} ${TUSB_SRC} ${FATFS_SRC})

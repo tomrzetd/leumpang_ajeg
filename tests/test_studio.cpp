@@ -464,5 +464,71 @@ int main() {
         run(5);
         CHECK(cli.tele.mode == (uint16_t)Mode::FALLEN, "keluar TOOL -> FALLEN");
     }
+
+    // ================= stik PS4 lewat PAD (Fase 4B) =================
+    {
+        static SimRobot sim; static LapClient cli; std::vector<uint8_t> toSim;
+        std::vector<std::string> logs; std::vector<PadFeedback> fbs;
+        cli.write = [&](const uint8_t* d, size_t n) { toSim.insert(toSim.end(), d, d + n); };
+        cli.onLog = [&](const std::string& l) { logs.push_back(l); };
+        cli.onPadFeedback = [&](const PadFeedback& f) { fbs.push_back(f); };
+        sim.start([](const uint8_t* d, size_t n) { cli.feed(d, n); }, nullptr, false);
+        PadState pad{}; pad.flags = PAD_CONNECTED; pad.battery = 200;
+        bool padLive = false;                   // kirim PAD tiap 20 ms (50 Hz) bila true
+        auto run = [&](int cycles) {
+            for (int i = 0; i < cycles; ++i) {
+                static int k = 0; ++k;
+                if (k % 50 == 0) cli.ping();
+                if (padLive && k % 2 == 0) { ++pad.seq; cli.sendPad(pad); }
+                if (!toSim.empty()) { std::vector<uint8_t> b; b.swap(toSim); sim.fromHost(b.data(), b.size()); }
+                sim.advance(1);
+            }
+        };
+        auto logged = [&](const char* s) {
+            for (auto& l : logs) if (l.find(s) != std::string::npos) return true;
+            return false;
+        };
+        auto mode = [&]() { return (Mode)cli.tele.mode; };
+        cli.begin(LapClient::Rates{}); run(20);
+        CHECK(cli.haveHello && (cli.hello.caps & lap::CAP_PAD), "sim mengiklankan CAP_PAD");
+        run(300);
+        CHECK(mode() == Mode::READY, "READY sebelum stik");
+        padLive = true; run(10);
+        CHECK(logged("stik aktif"), "stik aktif saat PAD pertama");
+        pad.buttons = PAD_CROSS; run(6); pad.buttons = 0; run(6);
+        CHECK(mode() == Mode::READY, "X tanpa L1 diabaikan (deadman)");
+        pad.buttons = PAD_PS; run(6); pad.buttons = 0; run(6);
+        CHECK(mode() == Mode::READY, "PS dalam 1 s pertama diabaikan (tombol sambung DS4)");
+        run(100);
+        pad.buttons = PAD_L1; run(4); pad.buttons = PAD_L1 | PAD_CROSS; run(6); pad.buttons = PAD_L1; run(6);
+        CHECK(mode() == Mode::BALANCE, "L1+X = GO -> BALANCE");
+        pad.ly = 100; run(10);
+        CHECK(mode() == Mode::BALANCE && logged("gaitEnable=0"), "stik maju ditolak bila gaitEnable=0");
+        cli.setParam((uint8_t)ParamId::GAIT_ENABLE, 1); run(5);
+        pad.ly = 100; run(20);
+        CHECK(mode() == Mode::WALK_CONT, "L1 + stik kiri maju -> WALK_CONT");
+        pad.buttons = 0; run(6);
+        CHECK(logged("L1 dilepas") && mode() == Mode::WALK_CONT, "lepas L1: gait berhenti, robot tetap berdiri");
+        logs.clear();
+        pad.buttons = PAD_L1; run(10);
+        CHECK(!logged("L1 dilepas"), "L1 lagi + stik: berjalan lagi");
+        padLive = false; run(40);
+        CHECK(logged("sinyal stik hilang") && mode() == Mode::WALK_CONT, "PAD hilang > 250 ms: gait berhenti, tidak dijatuhkan");
+        padLive = true; pad.buttons = PAD_PS; run(10);
+        CHECK(mode() == Mode::WALK_CONT, "PS saat baru tersambung lagi diabaikan");
+        pad.buttons = 0; run(110); fbs.clear();
+        pad.buttons = PAD_TOUCH; run(6); pad.buttons = 0; run(30);
+        CHECK(mode() == Mode::FALLEN && logged("E-STOP dari stik"), "klik touchpad = E-STOP (servo free)");
+        bool red = false, rumble = false;
+        for (auto& f : fbs) { red |= f.r > 0 && f.g == 0 && f.b == 0; rumble |= f.rumble10ms > 0 && f.strong > 0; }
+        CHECK(red && rumble, "feedback: lightbar merah + getar saat E-STOP");
+        pad.buttons = PAD_L1 | PAD_OPTIONS; run(6); pad.buttons = 0; run(200);
+        CHECK(mode() == Mode::READY, "L1+Options = berdiri lagi (reset)");
+        bool green = false; fbs.clear(); run(30);
+        for (auto& f : fbs) green |= f.g > 0 && f.r == 0 && f.b == 0;
+        CHECK(green, "feedback: lightbar hijau di READY");
+        pad.flags = 0; run(6);
+        CHECK(logged("stik terputus"), "radio melapor stik terputus");
+    }
     return checkSummary("test_studio");
 }

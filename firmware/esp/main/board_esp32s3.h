@@ -4,6 +4,7 @@
 //  strapping 0/3/45/46.
 // =============================================================================
 #pragma once
+#include "sdkconfig.h"
 
 #define LA_BOARD_NAME   "leumpang-s3"
 #define LA_BOARD_ID     1                 // la::lap::BOARD_ESP32S3
@@ -18,6 +19,23 @@ constexpr int BUS_L_TX = 21, BUS_L_RX = 18, BUS_L_EN = 7;
 constexpr int IMU_SDA = 8, IMU_SCL = 9;
 #ifndef ICM_INT_GPIO
 #define ICM_INT_GPIO -1                   // opsional: 1 atau 12 bila INT disambung
+#endif
+
+// ---- Leumpang Radio (Fase 4B) ----
+//  S3 hanya punya 3 UART (1/2 = bus ICS). Radio memakai UART0 bila konsol dipindah ke
+//  USB-Serial-JTAG (CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y); selain itu radio nonaktif.
+#if defined(CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG) && CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
+#ifndef LA_RADIO_TX
+#define LA_RADIO_TX 48
+#endif
+#ifndef LA_RADIO_RX
+#define LA_RADIO_RX 12
+#endif
+#define LA_RADIO_UART 0
+#else
+#define LA_RADIO_TX -1
+#define LA_RADIO_RX -1
+#define LA_RADIO_UART -1
 #endif
 
 constexpr int LCD_SCK = 10, LCD_MOSI = 11, LCD_CS = 13, LCD_DC = 14, LCD_RST = 15;
@@ -38,6 +56,9 @@ constexpr int SD_LDO_CHAN = -1;           // tanpa LDO internal
 constexpr int BOARD_USED_PINS[] = {
     PIN_LED1, PIN_RGB, PIN_T2, BUS_R_TX, BUS_R_RX, BUS_L_TX, BUS_L_RX, BUS_R_EN, BUS_L_EN,
     IMU_SDA, IMU_SCL, LCD_SCK, LCD_MOSI, LCD_CS, LCD_DC, LCD_RST,
+#if LA_RADIO_TX >= 0
+    LA_RADIO_TX, LA_RADIO_RX,
+#endif
 #if LA_SD_ENABLE
     SD_CLK, SD_CMD, SD_D0,
 #if LA_SD_4BIT

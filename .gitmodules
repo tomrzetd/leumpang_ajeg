@@ -2,3 +2,7 @@
 	path = firmware/third_party/esp_hosted
 	url = https://github.com/espressif/esp-hosted-mcu.git
 	shallow = true
+[submodule "firmware/radio/third_party/bluepad32"]
+	path = firmware/radio/third_party/bluepad32
+	url = https://github.com/ricardoquesada/bluepad32.git
+	shallow = true

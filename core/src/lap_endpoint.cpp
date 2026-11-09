@@ -112,6 +112,14 @@ void LapEndpoint::handle(const Packet& p, uint32_t nowMs) {
             submit(c);
             return;
         }
+        case PAD: {
+            Command c{}; c.type = CmdType::PAD;
+            if (!padDecode(p.body, p.len, c.pad)) { ack(p, BAD_LEN); return; }
+            if (h_.submit) h_.submit(h_.ctx, c);          // tanpa ACK: 50 Hz, yang terbaru menang
+            if (!padSeen_ && h_.snapshot) { h_.snapshot(h_.ctx, snap_); padRumbleSeen_ = snap_.padRumble; }
+            padSeen_ = true; padRxMs_ = nowMs;
+            return;
+        }
         case SERVO_TOOL: {
             // body: req, op, bus, id, sc, arg -> SERVO_TOOL_RESULT (bukan ACK)
             Reader r(p.body, p.len);
@@ -243,6 +251,10 @@ void LapEndpoint::handle(const Packet& p, uint32_t nowMs) {
 void LapEndpoint::poll(uint32_t nowMs) {
     if (rebootAtMs_ && (int32_t)(nowMs - rebootAtMs_) >= 0) { rebootAtMs_ = 0; if (h_.reboot) h_.reboot(h_.ctx); }
     if (active_ && nowMs - lastRxMs_ > LINK_TIMEOUT_MS) active_ = false;
+    if (padSeen_ && h_.snapshot) {
+        if (nowMs - padRxMs_ > 1000) padSeen_ = false;     // radio diam: berhenti mengirim feedback
+        else padFeedback(nowMs);
+    }
     if (!active_ || !h_.snapshot) return;
     if (toolWait_) {
         h_.snapshot(h_.ctx, snap_);
@@ -265,6 +277,32 @@ void LapEndpoint::poll(uint32_t nowMs) {
     if (servo) { ServoStateMsg m; fillServoState(snap_, m);       send(SERVO_STATE, m); lastServo_ = nowMs; }
     if (gait)  { GaitStateMsg m;  fillGaitState(snap_, m);        send(GAIT_STATE, m);  lastGait_ = nowMs; }
     if (snap_.cfgGen != lastCfgGen_) sendConfig();      // config berubah -> broadcast
+}
+
+// Warna lightbar per mode: hijau siap, biru jalan, merah jatuh/free, ungu alat servo,
+// toska live pose, kuning motion, putih reset/boot. Getar saat robot jatuh atau E-STOP.
+void LapEndpoint::padFeedback(uint32_t nowMs) {
+    h_.snapshot(h_.ctx, snap_);
+    const bool rumble = snap_.padRumble != padRumbleSeen_;
+    if (!rumble && nowMs - padFbMs_ < 250) return;
+    padRumbleSeen_ = snap_.padRumble; padFbMs_ = nowMs;
+    PadFeedback f{};
+    switch (snap_.mode) {
+        case Mode::READY:       f.r = 0;  f.g = 60; f.b = 0;  break;
+        case Mode::BALANCE: case Mode::WALK_INIT: case Mode::WALK_HOLD: case Mode::WALK_STEP:
+        case Mode::WALK_CONT:   f.r = 0;  f.g = 0;  f.b = 80; break;
+        case Mode::FALLEN:      f.r = 80; f.g = 0;  f.b = 0;  break;
+        case Mode::TOOL:        f.r = 50; f.g = 0;  f.b = 60; break;
+        case Mode::LIVE_POSE:   f.r = 0;  f.g = 50; f.b = 50; break;
+        case Mode::MOTION_PLAY: f.r = 70; f.g = 50; f.b = 0;  break;
+        default:                f.r = 30; f.g = 30; f.b = 30; break;
+    }
+    if (rumble) { f.rumble10ms = 30; f.weak = 0; f.strong = 200; }
+    f.leds = 1;
+    Packet o; o.type = PAD_FEEDBACK; o.seq = seq_++;
+    const uint8_t b[PAD_FEEDBACK_LEN] = {f.r, f.g, f.b, f.rumble10ms, f.weak, f.strong, f.leds};
+    memcpy(o.body, b, sizeof b); o.len = PAD_FEEDBACK_LEN;
+    sendPacket(o);
 }
 
 void LapEndpoint::toolReply(uint8_t req, uint8_t op, uint8_t status, uint8_t bus, uint8_t id, int32_t value,

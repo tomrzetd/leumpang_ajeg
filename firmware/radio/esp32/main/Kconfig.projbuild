@@ -1,0 +1,15 @@
+menu "Leumpang Radio"
+    config LA_RADIO_TX
+        int "GPIO TX ke robot (ke RX robot)"
+        default 26
+        help
+            26/27 tersedia di DevKit WROOM-32 dan ESP32-PICO-KIT (GPIO16/17 dipakai flash di PICO-D4).
+    config LA_RADIO_RX
+        int "GPIO RX dari robot (dari TX robot)"
+        default 27
+    config LA_RADIO_LED
+        int "GPIO LED status (-1 = tanpa LED)"
+        default 2
+        help
+            DevKitC: LED biru di GPIO2. ESP32-PICO-KIT tidak punya LED pengguna: isi -1 atau pasang LED sendiri.
+endmenu

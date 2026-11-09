@@ -70,6 +70,8 @@ Satuan: sudut **derajat** (f32), panjang **mm**, waktu **ms** kecuali disebut.
 | 44 | MOTION_STATUS | robot→host | 4 × (`u8 state, u8 nFrames, char name[16]`) (72 B); state 0 kosong, 1 menulis, 2 siap, 3 diputar |
 | 46 | SERVO_TOOL | host→robot | `u8 req, u8 op, u8 bus, u8 id, u8 sc, u8 arg` — alat servo ICS, mode 830 (§3.9) |
 | 47 | SERVO_TOOL_RESULT | robot→host | `u8 req, u8 op, u8 status, u8 bus, u8 id, i32 value, u8 len, u8 data[len≤64]` |
+| 50 | PAD | radio→robot | `u8 flags(bit0 tersambung), u8 baterai, u32 tombol, i8 lx, ly, rx, ry (atas/kanan +), u8 l2, r2, u8 seq` — 50 Hz, tanpa ACK (§3.10) |
+| 51 | PAD_FEEDBACK | robot→radio | `u8 r, g, b, u8 getar/10 ms, u8 lemah, u8 kuat, u8 led pemain` — ≥ 4 Hz selama PAD datang |
 | 80 | FILE_LIST | host→robot | `u8 req, u16 start, path` → FILE_ENTRIES (§3.8) |
 | 81 | FILE_READ | host→robot | `u8 req, u32 offset, u8 len(≤200), path` → FILE_DATA |
 | 82 | FILE_WRITE | host→robot | `u8 req, u32 offset, u8 flags(bit0 truncate), u8 pathLen, path, data` → FILE_RESULT |
@@ -85,7 +87,7 @@ Satuan: sudut **derajat** (f32), panjang **mm**, waktu **ms** kecuali disebut.
 * `role`: 0 robot, 1 phone, 2 desktop, 3 sim, 4 tool
 * `board`: 0 unknown, 1 esp32s3, 2 esp32p4, 3 stm32h562, 4 sim
 * `caps` (bit): 0 Wi-Fi, 1 SD, 2 gait intent, 3 motion, 4 sim, 5 LCD, 6 USB CDC, 7 live pose, 8 perception, 9 EXT,
-  10 berkas SD (FILE_*), 11 profil robot dari SD, 12 alat servo (SERVO_TOOL)
+  10 berkas SD (FILE_*), 11 profil robot dari SD, 12 alat servo (SERVO_TOOL), 13 stik lewat board radio (PAD)
 * `flags` TELEMETRY (bit): 0 IMU fresh, 1 IMU init, 2 kalibrasi selesai, 3 persist pending, 4 kaki tumpu kiri, 5 niat gait aktif, 6 langkah maju diblokir rintangan
 * `status` ACK: 0 OK, 1 BAD_LEN, 2 UNSUPPORTED, 3 REJECTED_STATE, 4 BUSY, 5 BAD_VALUE
 * `mode`: 700 RAW, 705 FALLEN, 710 RESET, 720 READY, 730 BALANCE, 740–770 langkah, 780 POSE_HOLD, 790 ANGLE, 791 MIRROR,
@@ -208,6 +210,18 @@ python3 tools/lapctl.py --tcp 192.168.4.1 servo get R 3 stretch
 python3 tools/lapctl.py --tcp 192.168.4.1 servo setid L 5      # satu servo saja di bus L
 python3 tools/lapctl.py --tcp 192.168.4.1 servo exit
 ```
+
+### 3.10 Stik (PAD, Fase 4B)
+
+Board radio ([RADIO.md](RADIO.md)) adalah peer LAP di UART 460800 8N1. Endpoint robot mana pun
+(radio UART, TCP, konsol) menerima PAD, jadi PC bisa berperan sebagai radio (`lapctl pad`).
+Bit tombol (`core/include/leumpang/pad.h`): 0 X, 1 O, 2 kotak, 3 segitiga, 4 L1, 5 R1, 6 L2, 7 R2,
+8 Share, 9 Options, 10 L3, 11 R3, 12 PS, 13 klik touchpad, 16 atas, 17 bawah, 18 kanan, 19 kiri.
+
+Aturan di robot: PS/touchpad = E-STOP (diabaikan 1 s setelah tersambung); semua aksi lain butuh L1
+(deadman); PAD hilang > 250 ms atau `flags` bit0 = 0 → gait berhenti tanpa menjatuhkan robot.
+Robot mengirim PAD_FEEDBACK ke link yang mengirim PAD (berhenti 1 s setelah PAD terakhir);
+`getar` > 0 hanya saat robot baru jatuh / E-STOP.
 
 ### 3.4 Blackbox SD
 

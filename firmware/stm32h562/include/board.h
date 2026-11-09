@@ -44,6 +44,10 @@
 #define ICS_REPLY_TIMEOUT_US 300
 
 #define IMU_I2C           I2C1
+/* Leumpang Radio (Fase 4B): USART1 PA9 TX -> RX radio, PA10 RX <- TX radio, 460800 8N1 */
+#define RADIO_UART        USART1
+#define RADIO_BAUD        460800u
+
 #define IMU_SCL_PORT      GPIOB
 #define IMU_SCL_PIN       GPIO_PIN_6
 #define IMU_SDA_PORT      GPIOB
@@ -55,6 +59,7 @@
 
 /* Prioritas NVIC (angka kecil = lebih tinggi). SysTick 0 (HAL timeout dipakai di ISR). */
 #define PRIO_TIMEBASE     1          /* TIM2 overflow jam mikrodetik */
+#define PRIO_RADIO        2          /* USART1 RX: hanya salin byte ke ring (us); di atas kontrol agar FIFO tak luber */
 #define PRIO_USB          3
 #define PRIO_IMU          5          /* TIM7 500 Hz: baca I2C + Mahony */
 #define PRIO_CONTROL      6          /* TIM6 100 Hz: la::Controller::step */

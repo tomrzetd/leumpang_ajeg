@@ -10,6 +10,7 @@
 #include "leumpang/blackbox.h"
 #include "leumpang/files.h"
 #include "leumpang/profile.h"
+#include "leumpang/lap_endpoint.h"
 
 // clock.cpp
 void     la_clock_init();                 // PLL 250 MHz, HSI48+CRS (USB), PLL1Q 100 MHz (SDMMC)
@@ -42,6 +43,9 @@ bool     storage_load_cfg(la::RuntimeConfig* cfg, int16_t trim[2][la::SERVO_SLOT
 bool     storage_save_cfg(const la::RuntimeConfig& cfg, const int16_t trim[2][la::SERVO_SLOTS]);
 
 // main.cpp
+// Leumpang Radio (radio.cpp): endpoint LAP kedua di USART1
+void     radio_init(const la::lap::LapEndpoint::Host& h, const la::lap::Hello& self);
+void     radio_poll(uint32_t nowMs);          // dari main loop
 void     la_log_main(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
 #endif
 
@@ -51,6 +55,7 @@ extern "C" {
 void la_tim2_overflow_isr(void);
 void la_tim6_isr(void);
 void la_tim7_isr(void);
+void USART1_IRQHandler(void);
 extern volatile uint32_t g_tim2_hi;
 #ifdef __cplusplus
 }
