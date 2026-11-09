@@ -1,0 +1,21 @@
+selftest: jendela 1600x920, grafis 3
+      READY setelah 2824 ms
+ok    simulator terhubung, mode READY
+ok    GAIT_STATE & SERVO_STATE diterima
+ok    twin punya pose semua link
+      layar -> 01_servo.png (1600x920)
+ok    contoh gerak 'lambai' dimuat
+ok    unggah gerak ke slot 0
+ok    slot 0 siap di robot
+ok    robot memutar gerak (mode 810)
+      layar -> 02_gerak_diputar.png (1600x920)
+ok    gerak selesai -> READY
+      layar -> 03_pratinjau_gerak.png (1600x920)
+ok    live pose (mode 820)
+      layar -> 04_kamera.png (1600x920)
+      layar -> 05_jalan.png (1600x920)
+      layar -> 06_parameter.png (1600x920)
+      layar -> 07_log.png (1600x920)
+ok    log robot tampil
+ok    tidak ada warning/galat QML
+== selftest studio: lulus
