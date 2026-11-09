@@ -7,7 +7,7 @@ UART. Board radio yang didukung:
 | Board | Chip | Firmware | Catatan |
 |---|---|---|---|
 | ESP32 DevKit WROOM-32 / ESP32-PICO-KIT (PICO-D4) | ESP32 klasik | `firmware/radio/esp32` (ESP-IDF 5.3/5.4) | paling lama diuji di Bluepad32 |
-| Raspberry Pi **Pico 2 W** | RP2350 + CYW43439 | `firmware/radio/pico2w` (Pico SDK 2.1.1+) | juga Pico W (RP2040): `-DPICO_BOARD=pico_w` |
+| Raspberry Pi **Pico 2 W** | RP2350 + CYW43439 | `firmware/radio/pico2w` (Pico SDK 2.2.0+) | juga Pico W (RP2040): `-DPICO_BOARD=pico_w` |
 
 Keduanya memakai [Bluepad32](https://github.com/ricardoquesada/bluepad32) 4.2.0 dan kode bersama
 `firmware/radio/common/radio.cpp`, jadi perilakunya sama. Selain DS4, DualSense (PS5), Switch Pro,
@@ -49,7 +49,7 @@ Atau unduh artefak **leumpang-radio-esp32** dari tab Actions dan flash dengan `e
 Unduh artefak **leumpang-radio-pico2_w** dari tab Actions. Tahan tombol BOOTSEL, colokkan USB,
 lalu salin `leumpang_radio_pico2_w.uf2` ke drive `RP2350`. Untuk membangun sendiri:
 ```bash
-export PICO_SDK_PATH=/jalur/pico-sdk        # 2.1.1, dengan submodule lib/btstack lib/cyw43-driver ...
+export PICO_SDK_PATH=/jalur/pico-sdk        # 2.2.0+, dengan submodule lib/btstack lib/cyw43-driver ...
 cd firmware/radio/pico2w
 cmake -B build -DPICO_BOARD=pico2_w && cmake --build build -j
 ```

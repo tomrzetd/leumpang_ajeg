@@ -78,7 +78,7 @@ jobs:
             firmware/radio/esp32/build/flash_args
 
   radio-pico:
-    name: Leumpang Radio ${{ matrix.board }} (Bluepad32, Pico SDK 2.1.1)
+    name: Leumpang Radio ${{ matrix.board }} (Bluepad32, Pico SDK 2.2.0)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -91,9 +91,9 @@ jobs:
       - uses: carlosperate/arm-none-eabi-gcc-action@v1
         with:
           release: '13.3.Rel1'
-      - name: Pico SDK 2.1.1
+      - name: Pico SDK 2.2.0
         run: |
-          git clone --depth 1 --branch 2.1.1 https://github.com/raspberrypi/pico-sdk.git "$RUNNER_TEMP/pico-sdk"
+          git clone --depth 1 --branch 2.2.0 https://github.com/raspberrypi/pico-sdk.git "$RUNNER_TEMP/pico-sdk"
           git -C "$RUNNER_TEMP/pico-sdk" submodule update --init --depth 1 lib/btstack lib/cyw43-driver lib/lwip lib/tinyusb lib/mbedtls
           echo "PICO_SDK_PATH=$RUNNER_TEMP/pico-sdk" >> "$GITHUB_ENV"
       - name: Build

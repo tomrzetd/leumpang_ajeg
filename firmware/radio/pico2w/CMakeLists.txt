@@ -1,5 +1,5 @@
 # Leumpang Radio untuk Raspberry Pi Pico 2 W (atau Pico W: -DPICO_BOARD=pico_w)
-#   export PICO_SDK_PATH=/jalur/pico-sdk   (2.1.1+, dengan submodule)
+#   export PICO_SDK_PATH=/jalur/pico-sdk   (2.2.0+, dengan submodule; 2.1.x gagal membangun pioasm dengan g++ baru)
 #   cmake -B build -DPICO_BOARD=pico2_w && cmake --build build -j
 #   -> build/leumpang_radio.uf2 (tahan BOOTSEL, colok USB, salin .uf2)
 cmake_minimum_required(VERSION 3.13)
