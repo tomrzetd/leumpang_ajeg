@@ -40,6 +40,7 @@ BaseType_t xSemaphoreTake(SemaphoreHandle_t, TickType_t); BaseType_t xSemaphoreG
 BaseType_t xSemaphoreGiveFromISR(SemaphoreHandle_t, BaseType_t*);
 // ---- esp_timer ----
 int64_t esp_timer_get_time(void);
+void esp_restart(void);
 typedef void* esp_timer_handle_t;
 typedef void (*esp_timer_cb_t)(void*);
 typedef struct { esp_timer_cb_t callback; void* arg; int dispatch_method; const char* name; bool skip_unhandled_events; } esp_timer_create_args_t;

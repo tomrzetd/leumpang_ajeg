@@ -4,6 +4,7 @@
 //  dipakai bersama: manusia mengetik tombol, HP/PC mengirim frame LAP biner.
 //  Satu-satunya task yang menulis ke port -> frame tidak pernah terpotong log.
 // =============================================================================
+#include "esp_system.h"
 #include "shared.h"
 #include "leumpang/motion.h"
 
@@ -65,10 +66,13 @@ void consoleTask(void*) {
     self.role = la::lap::ROLE_ROBOT; self.board = LA_BOARD_ID;
     self.fwMajor = la::CORE_VER_MAJOR; self.fwMinor = la::CORE_VER_MINOR; self.fwPatch = la::CORE_VER_PATCH;
     self.caps = la::lap::CAP_WIFI | la::lap::CAP_LCD | la::lap::CAP_MOTION | la::lap::CAP_GAIT_INTENT | la::lap::CAP_LIVE_POSE | la::lap::CAP_PERCEPTION |
+                (storage_files() ? (uint32_t)(la::lap::CAP_FILES | la::lap::CAP_PROFILE) : 0u) |
                 la::lap::CAP_USB_CDC | (storage_sd_ok() ? (uint32_t)la::lap::CAP_SD : 0u);
     strncpy(self.name, LA_BOARD_NAME, 16);
     la::lap::LapEndpoint::Host h;
     h.submit = epSubmit; h.snapshot = epSnapshot; h.savedGen = epSaved;
+    h.files = storage_files();
+    h.reboot = [](void*) { esp_restart(); };
     h.motions = &control_motions(); h.motionSaved = epMotionSaved;
     la::lap::SerialLink::Io io; io.write = ioWrite; io.key = ioKey;
     s_link.init(io, h, self);

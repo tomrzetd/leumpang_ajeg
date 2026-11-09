@@ -18,7 +18,7 @@ set(LA_ORT_VERSION 1.22.0 CACHE STRING "Versi ONNX Runtime")
 # ---- leumpang-core + pustaka studio (sama persis dengan firmware & tes host) ----
 add_library(la_core STATIC
   ${LA_ROOT}/core/src/controller.cpp ${LA_ROOT}/core/src/lap.cpp ${LA_ROOT}/core/src/lap_endpoint.cpp
-  ${LA_ROOT}/core/src/lap_serial.cpp ${LA_ROOT}/core/src/motion.cpp ${LA_ROOT}/core/src/icm20948.cpp)
+  ${LA_ROOT}/core/src/lap_serial.cpp ${LA_ROOT}/core/src/motion.cpp ${LA_ROOT}/core/src/icm20948.cpp ${LA_ROOT}/core/src/profile.cpp ${LA_ROOT}/core/src/files.cpp ${LA_ROOT}/core/src/files_posix.cpp)
 target_include_directories(la_core PUBLIC ${LA_ROOT}/core/include)
 if(MSVC)
   target_compile_definitions(la_core PUBLIC _CRT_SECURE_NO_WARNINGS NOMINMAX _USE_MATH_DEFINES)

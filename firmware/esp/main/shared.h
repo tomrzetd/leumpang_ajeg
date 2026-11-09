@@ -4,6 +4,8 @@
 //  pendek untuk modul board (web, UI, IMU, persistensi).
 // =============================================================================
 #pragma once
+#include "leumpang/profile.h"
+#include "leumpang/files.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include "app_config.h"
@@ -34,7 +36,7 @@ inline RuntimeConfig runtime_config_default() { return la::runtimeConfigDefault(
 namespace la { class MotionStore; template <typename T, uint32_t N> class SpscRing; struct BlackboxRecord; }
 
 // ---- Kontrol (control.cpp, core1) ------------------------------------------
-void control_init(const RuntimeConfig& cfg, const int16_t trim[2][SERVO_SLOTS]);
+void control_init(const RuntimeConfig& cfg, const int16_t trim[2][SERVO_SLOTS], const la::RobotProfile* profile);
 bool control_start();
 bool control_queue_cmd(const RobotCommand& c);     // non-blocking; false bila penuh
 bool control_push_key(char c);
@@ -45,7 +47,10 @@ void control_set_blackbox(la::SpscRing<la::BlackboxRecord, 256>* ring);   // seb
 // ---- Konsol & SD (console.cpp, storage.cpp) ---------------------------------
 void console_early_init();                 // queue log (panggil paling awal)
 void console_start();
-void storage_init();                       // mount SD, muat motion, buka blackbox
+void storage_mount();                      // mount SD + muat profil robot (SEBELUM control_init)
+void storage_init();                       // muat motion, buka blackbox (setelah control_init)
+const la::RobotProfile* storage_profile(); // profil dari /sd/config/robot.json (nullptr = bawaan)
+la::FileOps* storage_files();              // layanan berkas LAP (nullptr = tanpa SD)
 bool storage_sd_ok();
 void storage_save_motion(int slot, const uint8_t* d, size_t n);
 

@@ -9,6 +9,7 @@
 #pragma once
 #include "leumpang/types.h"
 #include "leumpang/ics.h"
+#include "leumpang/profile.h"
 #include "leumpang/motion.h"
 #include "leumpang/blackbox.h"
 
@@ -42,7 +43,6 @@ struct WalkingState {
     uint16_t uprightCt;
 };
 
-struct JointDef { uint8_t id; int16_t center; int8_t sign; int16_t lo, hi; };
 extern const JointDef JOINTS[SERVO_BUSES][SERVO_SLOTS];   // profil KHR-3HV
 extern const ServoPositions HOME_POSE;
 extern const char* const JOINT_NAMES[SERVO_BUSES][SERVO_SLOTS];
@@ -53,6 +53,7 @@ public:
         bool autoCalibrate   = true;
         bool autoRearm       = false;
         bool swcontLegacy    = false;
+        const RobotProfile* profile = nullptr;   // nullptr = bawaan KHR-3HV
     };
 
     void init(const Platform& p, const RuntimeConfig& cfg, const int16_t trim[2][SERVO_SLOTS],
@@ -72,6 +73,7 @@ public:
 
     // Fase 1
     MotionStore& motions() { return motions_; }          // dibagi dengan thread komunikasi
+    const RobotProfile& profile() const { return *prof_; }
     void setBlackbox(BlackboxRing* r) { bb_ = r; }        // nullptr = mati
 
 private:
@@ -127,6 +129,7 @@ private:
     // ---- Fase 2: pose langsung ----
     void poseTarget(const Command& c);
     void livePoseStep();
+    static int16_t* srcOf(ServoPositions& v, uint8_t b, uint8_t s);
     // ---- Fase 3: refleks rintangan ----
     bool obstacleBlocked() const;
     // ---- util ----
@@ -164,6 +167,8 @@ private:
     float    gaitTgtStride_ = 0, gaitTgtYaw_ = 0;      // target dari niat
     float    gx_ = 0, gxs_ = 0, gyaw_ = 0;             // offset tumpu/ayun (mm), yaw (rad)
     int64_t  intentDeadlineUs_ = 0;
+    const RobotProfile* prof_ = nullptr;
+    ServoPositions homePos_{};
     int64_t  poseDeadlineUs_ = 0;
     int64_t  obstacleDeadlineUs_ = 0;
     uint16_t obstacleFrontMm_ = 0xFFFF;

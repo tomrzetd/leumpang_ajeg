@@ -191,12 +191,13 @@ TelemetrySnapshot telemetry_copy() {
     return t;
 }
 
-void control_init(const RuntimeConfig& cfg, const int16_t trim[2][SERVO_SLOTS]) {
+void control_init(const RuntimeConfig& cfg, const int16_t trim[2][SERVO_SLOTS], const la::RobotProfile* profile) {
     la::Platform p{ platNow, platLog, nullptr };
     la::Controller::Options o;
     o.autoCalibrate = IMU_AUTO_CALIBRATE != 0;
     o.autoRearm     = AUTO_REARM_AFTER_FALL != 0;
     o.swcontLegacy  = SWCONT_LEGACY != 0;
+    o.profile       = profile;                                  // nullptr = bawaan KHR-3HV
     g_ctrl.init(p, cfg, trim, o);
 
     gpio_config_t io = {};

@@ -152,6 +152,7 @@ extern "C" void app_main(void) {
         nvs_flash_init();
     }
     s_wifiMux = xSemaphoreCreateMutex();
+    storage_mount();                      // SD + /config/robot.json; sebelum console (endpoint USB butuh layanan berkas)
     console_start();
     logPrintf("\r\n=== Leumpang Ajeg (%s) core %u.%u.%u - tekan '?' untuk bantuan ===\r\n",
               LA_BOARD_NAME, la::CORE_VER_MAJOR, la::CORE_VER_MINOR, la::CORE_VER_PATCH);
@@ -162,7 +163,7 @@ extern "C" void app_main(void) {
     if (persist_load_cfg(&cfg, trim)) logPrintf("NVS: konfigurasi + trim dimuat\r\n");
     else                              logPrintf("NVS: konfigurasi default\r\n");
 
-    control_init(cfg, trim);
+    control_init(cfg, trim, storage_profile());
     storage_init();                       // SD: motion -> MotionStore, blackbox -> ring kontrol
     if (!imu_start())     logPrintf("GAGAL membuat task IMU!\r\n");
     if (!control_start()) logPrintf("GAGAL membuat task kontrol!\r\n");

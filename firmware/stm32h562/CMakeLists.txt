@@ -46,11 +46,11 @@ set(TUSB_SRC
   ${TUSB}/tusb.c ${TUSB}/common/tusb_fifo.c ${TUSB}/device/usbd.c
   ${TUSB}/class/cdc/cdc_device.c ${TUSB}/portable/st/stm32_fsdev/dcd_stm32_fsdev.c
   ${TUSB}/portable/st/stm32_fsdev/fsdev_common.c)
-set(FATFS_SRC ${st_fatfs_SOURCE_DIR}/source/ff.c)
+set(FATFS_SRC ${st_fatfs_SOURCE_DIR}/source/ff.c ${st_fatfs_SOURCE_DIR}/source/ffunicode.c)
 
 set(CORE ${CMAKE_CURRENT_LIST_DIR}/../../core)
 set(CORE_SRC ${CORE}/src/controller.cpp ${CORE}/src/lap.cpp ${CORE}/src/lap_endpoint.cpp
-             ${CORE}/src/lap_serial.cpp ${CORE}/src/motion.cpp ${CORE}/src/icm20948.cpp)
+             ${CORE}/src/lap_serial.cpp ${CORE}/src/motion.cpp ${CORE}/src/icm20948.cpp ${CORE}/src/profile.cpp ${CORE}/src/files.cpp)
 
 set(APP_SRC src/main.cpp src/clock.cpp src/ics_bus.cpp src/imu.cpp src/storage.cpp
             src/sd_diskio.c src/usb_descriptors.c src/stm32_it.c src/syscalls.c)

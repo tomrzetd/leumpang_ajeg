@@ -7,6 +7,7 @@
 #pragma once
 #include "leumpang/controller.h"
 #include "leumpang/lap_endpoint.h"
+#include "leumpang/files.h"
 
 #include <deque>
 #include <functional>
@@ -18,7 +19,9 @@ public:
     using Sink = std::function<void(const uint8_t*, size_t)>;
     using LogSink = std::function<void(const char*)>;
 
-    void start(Sink toHost, LogSink log = nullptr, bool randomStart = true);
+    void start(Sink toHost, LogSink log = nullptr, bool randomStart = true, const char* sdRoot = nullptr);
+    bool rebootRequested() const { return reboot_; }
+    ~SimRobot() { delete files_; }
     void fromHost(const uint8_t* d, size_t n);
     void advance(int cycles = 1);              // satu siklus = CONTROL_PERIOD_MS
     int64_t nowUs() const { return now_; }
@@ -48,7 +51,8 @@ private:
     int64_t            now_ = 1000000;
     float              rollDeg_ = 0, pitchDeg_ = 0;
     uint32_t           imuSeq_ = 0, noise_ = 12345;
-    bool               started_ = false;
+    bool               started_ = false, reboot_ = false;
+    FileOps*           files_ = nullptr;
 };
 
 }  // namespace la::studio

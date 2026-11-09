@@ -3,6 +3,7 @@
 //  Satu klien aktif; klien baru menggantikan yang lama. Tulis non-blocking:
 //  bila buffer TCP penuh, frame telemetry dibuang (bukan menahan task).
 // =============================================================================
+#include "esp_system.h"
 #include "shared.h"
 #include "leumpang/motion.h"
 
@@ -41,10 +42,13 @@ void lapTask(void*) {
     self.role = la::lap::ROLE_ROBOT; self.board = LA_BOARD_ID;
     self.fwMajor = la::CORE_VER_MAJOR; self.fwMinor = la::CORE_VER_MINOR; self.fwPatch = la::CORE_VER_PATCH;
     self.caps = la::lap::CAP_WIFI | la::lap::CAP_LCD | la::lap::CAP_MOTION | la::lap::CAP_GAIT_INTENT | la::lap::CAP_LIVE_POSE | la::lap::CAP_PERCEPTION |
+                (storage_files() ? (uint32_t)(la::lap::CAP_FILES | la::lap::CAP_PROFILE) : 0u) |
                 (storage_sd_ok() ? (uint32_t)la::lap::CAP_SD : 0u);
     strncpy(self.name, LA_BOARD_NAME, 16);
     la::lap::LapEndpoint::Host h;
     h.write = epWrite; h.submit = epSubmit; h.snapshot = epSnapshot; h.savedGen = epSaved;
+    h.files = storage_files();
+    h.reboot = [](void*) { esp_restart(); };
     h.motions = &control_motions();
     h.motionSaved = [](void*, int slot, const uint8_t* d, size_t n) { storage_save_motion(slot, d, n); };
 

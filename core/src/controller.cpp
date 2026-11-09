@@ -135,8 +135,8 @@ const char* const JOINT_NAMES[SERVO_BUSES][SERVO_SLOTS] = {
      "L HIP P", "L KNEE", "L ANKLE P", "L ANKLE R"},
 };
 
-int16_t* Controller::jointSrc(uint8_t b, uint8_t s) {
-    ServoPositions& v = servos_;
+int16_t* Controller::jointSrc(uint8_t b, uint8_t s) { return srcOf(servos_, b, s); }
+int16_t* Controller::srcOf(ServoPositions& v, uint8_t b, uint8_t s) {
     switch (s) {
         case 0:  return b == 0 ? &v.waist : &v.head;
         case 1:  return &v.U0[b];
@@ -174,7 +174,9 @@ void Controller::init(const Platform& p, const RuntimeConfig& cfg, const int16_t
     for (uint8_t b = 0; b < 2; ++b) for (uint8_t s = 0; s < SERVO_SLOTS; ++s)
         trim_[b][s] = (int16_t)clampi(trim[b][s], -TRIM_LIMIT, TRIM_LIMIT);
     walk_ = WalkingState();
-    servos_ = HOME_POSE;
+    prof_ = opt.profile ? opt.profile : &defaultProfile();
+    for (uint8_t b = 0; b < 2; ++b) for (uint8_t sl = 0; sl < SERVO_SLOTS; ++sl) *srcOf(homePos_, b, sl) = prof_->home[b][sl];
+    servos_ = homePos_;
     walk_.mode = Mode::RESET; walk_.motCt = 100;
     walk_.fhMax = cfg_.footLiftMax; walk_.swMax = 25; walk_.fwctUp = 1;
     initWalkState();
@@ -187,7 +189,7 @@ void Controller::init(const Platform& p, const RuntimeConfig& cfg, const int16_t
 //  Servo
 // ============================================================================
 int16_t Controller::jointTarget(uint8_t b, uint8_t s) {
-    const JointDef& j = JOINTS[b][s];
+    const JointDef& j = prof_->joint[b][s];
     const int32_t v = (int32_t)j.center + (int32_t)j.sign * ((int32_t)(*jointSrc(b, s)) + (int32_t)trim_[b][s]);
     return (int16_t)clampi(v, j.lo, j.hi);
 }
@@ -199,7 +201,7 @@ void Controller::primeOutputs() {
 void Controller::sendSlot(ServoBus& bus, uint8_t slot, bool freeTorque) {
     IcsExchange x{};
     for (uint8_t b = 0; b < 2; ++b)
-        ics::buildPosition(x.tx[b], JOINTS[b][slot].id,
+        ics::buildPosition(x.tx[b], prof_->joint[b][slot].id,
                            freeTorque ? ICS_POS_FREE : (uint16_t)clampi(lastOut_[b][slot], ICS_POS_MIN, ICS_POS_MAX));
     bus.exchange(x);
     const int64_t t = now();
@@ -235,7 +237,7 @@ uint8_t Controller::syncStateFromServoFeedback() {
     const int64_t t = now();
     for (uint8_t b = 0; b < 2; ++b) for (uint8_t s = 0; s < SERVO_SLOTS; ++s) {
         const ServoFeedback& fb = fb_[b][s];
-        const JointDef& j = JOINTS[b][s];
+        const JointDef& j = prof_->joint[b][s];
         if (!fb.valid || fb.lastUs == 0 || (t - fb.lastUs) > SERVO_FB_VALID_US) continue;
         const int16_t raw = (int16_t)clampi(fb.pos, j.lo, j.hi);
         lastOut_[b][s] = raw;
@@ -251,8 +253,9 @@ void Controller::bootFreeCycle(ServoBus& bus) { sendAllServoFree(bus); }
 void Controller::bootFinish(bool syncFromFeedback) {
     if (syncFromFeedback) {
         const uint8_t n = syncStateFromServoFeedback();
-        logf("Boot sync: %u/22 posisi servo terbaca%s\r\n", (unsigned)n,
-             n < 22 ? " (sisanya diasumsikan HOME - cek jalur RX/EN!)" : "");
+        const unsigned want = prof_->presentCount();
+        logf("Boot sync: %u/%u posisi servo terbaca%s\r\n", (unsigned)n, want,
+             n < want ? " (sisanya diasumsikan HOME - cek jalur RX/EN!)" : "");
     }
     startReset("boot", 100);
 }
@@ -548,6 +551,7 @@ void Controller::counterCont() {
 // ============================================================================
 void Controller::cmdGo() {
     if (walk_.mode != Mode::READY)          { logf("g: hanya dari mode 720\r\n"); return; }
+    if (!prof_->humanoid())                 { logf("g ditolak: profil '%s' generic (tanpa gait)\r\n", prof_->name); return; }
     if (!imuFresh())                        { logf("g ditolak: data IMU tidak valid\r\n"); return; }
     if (opt_.autoCalibrate && !cal_.done)   { logf("g ditolak: kalibrasi IMU belum selesai\r\n"); return; }
     walk_.fwct = 1; walk_.mode = Mode::BALANCE;
@@ -558,7 +562,7 @@ void Controller::walkControl() {
     WalkingState& w = walk_;
     switch (w.mode) {
         case Mode::RESET:
-            rampTo(HOME_POSE);
+            rampTo(homePos_);
             if (w.motCt > 0) w.motCt--;
             else {
                 initWalkState();
@@ -932,10 +936,10 @@ void Controller::motionStart(int slot) {
     if (!m) { logf("MOTION_PLAY ditolak: slot %d kosong/sibuk\r\n", slot); return; }
     for (int i = 0; i < m->nFrames; ++i)
         for (uint8_t b = 0; b < 2; ++b) for (uint8_t s = 0; s < SERVO_SLOTS; ++s) {
-            const JointDef& j = JOINTS[b][s];
+            const JointDef& j = prof_->joint[b][s];
             const int32_t raw = (int32_t)j.center + (int32_t)j.sign * ((int32_t)m->f[i].joint[b][s] + trim_[b][s]);
             if (raw < j.lo || raw > j.hi) {
-                logf("MOTION_PLAY ditolak: frame %d %s di luar batas (%ld)\r\n", i, JOINT_NAMES[b][s], (long)raw);
+                logf("MOTION_PLAY ditolak: frame %d %s di luar batas (%ld)\r\n", i, prof_->jname[b][s], (long)raw);
                 motions_.release(slot);
                 return;
             }
@@ -990,10 +994,10 @@ void Controller::poseTarget(const Command& c) {
     const uint32_t mask = c.poseMask & ((1u << (2 * SERVO_SLOTS)) - 1u);
     for (uint8_t b = 0; b < 2; ++b) for (uint8_t s = 0; s < SERVO_SLOTS; ++s) {
         if (!(mask & (1u << (b * SERVO_SLOTS + s)))) continue;
-        const JointDef& j = JOINTS[b][s];
+        const JointDef& j = prof_->joint[b][s];
         const int32_t raw = (int32_t)j.center + (int32_t)j.sign * ((int32_t)c.pose[b][s] + trim_[b][s]);
         if (raw < j.lo || raw > j.hi) {
-            logf("POSE_TARGET ditolak: %s di luar batas (%ld)\r\n", JOINT_NAMES[b][s], (long)raw);
+            logf("POSE_TARGET ditolak: %s di luar batas (%ld)\r\n", prof_->jname[b][s], (long)raw);
             return;
         }
     }

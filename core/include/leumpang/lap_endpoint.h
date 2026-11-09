@@ -11,6 +11,7 @@
 #pragma once
 #include "leumpang/lap.h"
 #include "leumpang/motion.h"
+#include "leumpang/files.h"
 
 namespace la {
 namespace lap {
@@ -29,6 +30,9 @@ public:
         void     (*motionSaved)(void* ctx, int slot, const uint8_t* d, size_t n) = nullptr;  // simpan ke SD
         // Fase 3: Leumpang Bus. Modul HAL menerima topik EXT dari host (nullptr = EXT UNSUPPORTED).
         bool     (*extHook)(void* ctx, uint16_t topic, const uint8_t* d, size_t n) = nullptr;
+        // Fase 4A: layanan berkas SD (nullptr = FILE_* UNSUPPORTED) dan reboot (profil baru berlaku saat boot)
+        FileOps* files = nullptr;
+        void     (*reboot)(void* ctx) = nullptr;
     };
     static constexpr uint32_t LINK_TIMEOUT_MS = 3000;
 
@@ -51,6 +55,8 @@ private:
     void ack(const Packet& p, uint8_t status);
     void sendConfig();
     void sendMotionStatus();
+    void handleFile(const Packet& p);
+    uint32_t rebootAtMs_ = 0;
 
     Host         h_{};
     Hello        self_{};

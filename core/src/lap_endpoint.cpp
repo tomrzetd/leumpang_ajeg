@@ -95,6 +95,17 @@ void LapEndpoint::handle(const Packet& p, uint32_t nowMs) {
                 case CMD_GET_CONFIG: ack(p, OK); sendConfig(); return;
                 case CMD_HELLO: send(HELLO, self_); ack(p, OK); return;
                 case CMD_MOTION_LIST: ack(p, h_.motions ? OK : UNSUPPORTED); sendMotionStatus(); return;
+                case CMD_REBOOT: {
+                    // hanya saat robot diam: servo bebas di FALLEN / RAW / READY
+                    Telemetry t{}; if (h_.snapshot) h_.snapshot(h_.ctx, t);
+                    const bool still = t.mode == Mode::READY || t.mode == Mode::FALLEN || t.mode == Mode::RAW_ANGLES;
+                    if (!h_.reboot) { ack(p, UNSUPPORTED); return; }
+                    if (!still) { ack(p, REJECTED_STATE); return; }
+                    ack(p, OK);
+                    sendLog("reboot diminta host (profil/firmware baru)\r\n");
+                    rebootAtMs_ = (nowMs + 300u) | 1u;                // beri waktu ACK/LOG terkirim
+                    return;
+                }
                 default: ack(p, BAD_VALUE); return;
             }
             submit(c);
@@ -197,6 +208,11 @@ void LapEndpoint::handle(const Packet& p, uint32_t nowMs) {
             submit(c);
             return;
         }
+        case FILE_LIST: case FILE_READ: case FILE_WRITE: case FILE_DELETE:
+        case FILE_MKDIR: case FILE_RENAME: case FILE_STAT:
+            if (!h_.files) { ack(p, UNSUPPORTED); return; }
+            handleFile(p);
+            return;
         case EXT: {
             ExtMsg m;
             if (!parsePacket(p, m)) { ack(p, BAD_LEN); return; }
@@ -211,6 +227,7 @@ void LapEndpoint::handle(const Packet& p, uint32_t nowMs) {
 }
 
 void LapEndpoint::poll(uint32_t nowMs) {
+    if (rebootAtMs_ && (int32_t)(nowMs - rebootAtMs_) >= 0) { rebootAtMs_ = 0; if (h_.reboot) h_.reboot(h_.ctx); }
     if (active_ && nowMs - lastRxMs_ > LINK_TIMEOUT_MS) active_ = false;
     if (!active_ || !h_.snapshot) return;
     const bool tele  = stream_.teleHz  && nowMs - lastTele_  >= 1000u / stream_.teleHz;
@@ -231,6 +248,84 @@ bool LapEndpoint::sendExt(uint16_t topic, const uint8_t* d, size_t n) {
     if (n) memcpy(m.data, d, n);
     send(EXT, m);
     return true;
+}
+
+void LapEndpoint::handleFile(const Packet& p) {
+    Reader r(p.body, p.len);
+    const uint8_t req = r.u8();
+    char path[100], path2[100];
+    Packet o; o.seq = seq_++;
+    Writer w(o.body, MAX_BODY);
+    auto rest = [&](char* out) {                                   // sisa body = jalur
+        const size_t n = r.remaining();
+        char raw[100]; size_t k = 0;
+        while (r.remaining() && k < sizeof(raw) - 1) raw[k++] = (char)r.u8();
+        raw[k] = 0;
+        return n < sizeof(raw) && sanitizePath(raw, k, out, 100);
+    };
+    auto result = [&](uint8_t st, uint32_t v, uint8_t extra = 0) {
+        o.type = FILE_RESULT; w.u8(req); w.u8(st); w.u32(v); w.u8(extra);
+        o.len = (uint8_t)w.size(); sendPacket(o);
+    };
+    switch (p.type) {
+        case FILE_LIST: {
+            const uint16_t start = r.u16();
+            if (!rest(path)) { result(FS_BAD_PATH, 0); return; }
+            FileEntry e[4]; bool more = false;
+            const int n = h_.files->list(path, start, e, 4, more);
+            o.type = FILE_ENTRIES;
+            w.u8(req); w.u8(n < 0 ? (uint8_t)-n : (uint8_t)FS_OK); w.u16(start); w.u8(n < 0 ? 0 : (uint8_t)n); w.u8(more ? 1 : 0);
+            for (int i = 0; i < n; ++i) {
+                const size_t L = strlen(e[i].name);
+                w.u8(e[i].dir ? 1 : 0); w.u32(e[i].size); w.u8((uint8_t)L); w.bytes(e[i].name, L);
+            }
+            o.len = (uint8_t)w.size(); sendPacket(o);
+            return;
+        }
+        case FILE_READ: {
+            const uint32_t off = r.u32(); uint8_t len = r.u8();
+            if (len > 200) len = 200;
+            if (!rest(path)) { result(FS_BAD_PATH, 0); return; }
+            uint8_t buf[200];
+            const int n = h_.files->read(path, off, buf, len);
+            o.type = FILE_DATA;
+            w.u8(req); w.u8(n < 0 ? (uint8_t)-n : (uint8_t)FS_OK); w.u32(off);
+            if (n > 0) w.bytes(buf, (size_t)n);
+            o.len = (uint8_t)w.size(); sendPacket(o);
+            return;
+        }
+        case FILE_WRITE: {
+            const uint32_t off = r.u32(); const uint8_t flags = r.u8(), pl = r.u8();
+            char raw[100]; size_t k = 0;
+            while (k < pl && k < sizeof(raw) - 1) raw[k++] = (char)r.u8();
+            raw[k] = 0;
+            if (k != pl || !r.ok() || !sanitizePath(raw, k, path, sizeof path) || !path[0]) { result(FS_BAD_PATH, 0); return; }
+            uint8_t data[MAX_BODY]; size_t n = 0;
+            while (r.remaining()) data[n++] = r.u8();
+            const FileStatus st = h_.files->write(path, off, data, n, (flags & 1) != 0);
+            result(st, off + (uint32_t)n);
+            return;
+        }
+        case FILE_DELETE: if (!rest(path)) { result(FS_BAD_PATH, 0); return; } result(h_.files->remove(path), 0); return;
+        case FILE_MKDIR:  if (!rest(path)) { result(FS_BAD_PATH, 0); return; } result(h_.files->mkdir(path), 0); return;
+        case FILE_RENAME: {
+            const uint8_t la = r.u8();
+            char raw[100]; size_t k = 0;
+            while (k < la && k < sizeof(raw) - 1) raw[k++] = (char)r.u8();
+            raw[k] = 0;
+            if (!sanitizePath(raw, k, path, sizeof path) || !path[0] || !rest(path2) || !path2[0]) { result(FS_BAD_PATH, 0); return; }
+            result(h_.files->rename(path, path2), 0);
+            return;
+        }
+        case FILE_STAT: {
+            if (!rest(path)) { result(FS_BAD_PATH, 0); return; }
+            uint32_t size = 0; bool dir = false;
+            const FileStatus st = h_.files->stat(path, size, dir);
+            result(st, size, dir ? 1 : 0);
+            return;
+        }
+        default: return;
+    }
 }
 
 void LapEndpoint::sendLog(const char* line) {

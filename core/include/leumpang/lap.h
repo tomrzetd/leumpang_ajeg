@@ -44,6 +44,10 @@ enum MsgType : uint8_t {
     MOTION_PLAY  = 0x43,
     MOTION_STATUS= 0x44,   // robot -> host: isi 4 slot
     POSE_TARGET  = 0x45,   // host -> robot (Fase 2): pose langsung, mode 820
+    FILE_LIST    = 0x80,   // host -> robot (Fase 4A): berkas SD
+    FILE_READ    = 0x81, FILE_WRITE = 0x82, FILE_DELETE = 0x83, FILE_MKDIR = 0x84, FILE_RENAME = 0x85, FILE_STAT = 0x86,
+    FILE_ENTRIES = 0x88,   // robot -> host
+    FILE_DATA    = 0x89, FILE_RESULT = 0x8A,
     EXT          = 0x60,   // dua arah (Fase 3): Leumpang Bus - topik modul/sensor tambahan
     SIM_IMU      = 0x70,   // hanya simulator
     SIM_FAULT    = 0x71,
@@ -53,11 +57,11 @@ enum AckStatus : uint8_t { OK = 0, BAD_LEN = 1, UNSUPPORTED = 2, REJECTED_STATE 
 enum Role  : uint8_t { ROLE_ROBOT = 0, ROLE_PHONE = 1, ROLE_DESKTOP = 2, ROLE_SIM = 3, ROLE_TOOL = 4 };
 enum Board : uint8_t { BOARD_UNKNOWN = 0, BOARD_ESP32S3 = 1, BOARD_ESP32P4 = 2, BOARD_STM32H562 = 3, BOARD_SIM = 4 };
 enum CmdId : uint8_t { CMD_RESET = 0, CMD_GO = 1, CMD_STOP = 2, CMD_CAL = 3, CMD_GET_CONFIG = 4, CMD_HELLO = 5,
-                      CMD_MOTION_LIST = 6 };
+                      CMD_MOTION_LIST = 6, CMD_REBOOT = 7 };
 enum Caps  : uint32_t {
     CAP_WIFI = 1u << 0, CAP_SD = 1u << 1, CAP_GAIT_INTENT = 1u << 2, CAP_MOTION = 1u << 3,
     CAP_SIM = 1u << 4, CAP_LCD = 1u << 5, CAP_USB_CDC = 1u << 6, CAP_LIVE_POSE = 1u << 7,
-    CAP_PERCEPTION = 1u << 8, CAP_EXT = 1u << 9,
+    CAP_PERCEPTION = 1u << 8, CAP_EXT = 1u << 9, CAP_FILES = 1u << 10, CAP_PROFILE = 1u << 11,
 };
 // Flag TELEMETRY
 enum TeleFlags : uint16_t {

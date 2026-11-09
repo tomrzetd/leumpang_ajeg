@@ -45,6 +45,9 @@ void LapClient::handle(const Packet& p) {
         case CONFIG:        haveConfig = parsePacket(p, config); break;
         case MOTION_STATUS: parsePacket(p, motions); break;
         case ACK:           parsePacket(p, lastAck); break;
+        case FILE_ENTRIES: case FILE_DATA: case FILE_RESULT:
+            if (onFileReply) onFileReply(p);
+            break;
         case LOG:
             if (onLog) onLog(std::string((const char*)p.body, p.len));
             break;
@@ -81,6 +84,30 @@ bool LapClient::motionUpload(uint8_t slot, const uint8_t* data, size_t n, bool s
 void LapClient::motionPlay(uint8_t slot, bool play) { MotionPlayMsg m; m.slot = slot; m.play = play ? 1 : 0; send(MOTION_PLAY, m); }
 void LapClient::simImu(float r, float pt) { SimImuMsg m; m.rollDeg = r; m.pitchDeg = pt; m.sensorOk = 1; send(SIM_IMU, m); }
 void LapClient::simFault(uint8_t b, uint8_t s, bool dead) { SimFaultMsg m; m.bus = b; m.slot = s; m.dead = dead; send(SIM_FAULT, m); }
+
+void LapClient::fileList(uint8_t req, uint16_t start, const char* path) {
+    Packet p; p.type = FILE_LIST; p.seq = seq_++; Writer w(p.body, MAX_BODY);
+    w.u8(req); w.u16(start); w.bytes(path, strlen(path)); p.len = (uint8_t)w.size(); sendPacket(p);
+}
+void LapClient::fileRead(uint8_t req, uint32_t off, uint8_t len, const char* path) {
+    Packet p; p.type = FILE_READ; p.seq = seq_++; Writer w(p.body, MAX_BODY);
+    w.u8(req); w.u32(off); w.u8(len); w.bytes(path, strlen(path)); p.len = (uint8_t)w.size(); sendPacket(p);
+}
+void LapClient::fileWrite(uint8_t req, uint32_t off, bool trunc, const char* path, const uint8_t* d, size_t n) {
+    Packet p; p.type = FILE_WRITE; p.seq = seq_++; Writer w(p.body, MAX_BODY);
+    const size_t pl = strlen(path);
+    w.u8(req); w.u32(off); w.u8(trunc ? 1 : 0); w.u8((uint8_t)pl); w.bytes(path, pl); w.bytes(d, n);
+    if (!w.ok()) return;
+    p.len = (uint8_t)w.size(); sendPacket(p);
+}
+void LapClient::fileSimple(uint8_t type, uint8_t req, const char* path) {
+    Packet p; p.type = type; p.seq = seq_++; Writer w(p.body, MAX_BODY);
+    w.u8(req); w.bytes(path, strlen(path)); p.len = (uint8_t)w.size(); sendPacket(p);
+}
+void LapClient::fileRename(uint8_t req, const char* a, const char* b) {
+    Packet p; p.type = FILE_RENAME; p.seq = seq_++; Writer w(p.body, MAX_BODY);
+    w.u8(req); w.u8((uint8_t)strlen(a)); w.bytes(a, strlen(a)); w.bytes(b, strlen(b)); p.len = (uint8_t)w.size(); sendPacket(p);
+}
 
 void LapClient::gaitSrc(int16_t o[SERVO_BUSES][SERVO_SLOTS]) const {
     // kin: K0[2],K1[2],K2[2],H[2],A0[2],A1[2],U0[2],U1[2],U2[2],E[2],head,waist

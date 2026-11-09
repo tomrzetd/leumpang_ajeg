@@ -152,12 +152,15 @@ int main() {
     la::lap::LapEndpoint::Host h;
     h.submit = epSubmit; h.snapshot = epSnapshot; h.savedGen = epSaved;
     h.motions = &g_ctrl.motions(); h.motionSaved = epMotionSaved;
+    h.reboot = [](void*) { NVIC_SystemReset(); };
     la::lap::SerialLink::Io io; io.write = ioWrite; io.key = ioKey;
 
     // SD dulu: config & motion tersimpan di kartu (STM32 ini tidak memakai flash internal untuk data)
     g_link.init(io, h, self);                       // log tersedia sejak awal (USB mungkin belum enumerasi)
     const bool sd = storage_mount();
-    self.caps = la::lap::CAP_USB_CDC | la::lap::CAP_MOTION | la::lap::CAP_GAIT_INTENT | la::lap::CAP_LIVE_POSE | la::lap::CAP_PERCEPTION | (sd ? (uint32_t)la::lap::CAP_SD : 0u);
+    h.files = storage_files();                      // FatFs; dipanggil dari main loop seperti operasi SD lain
+    self.caps = la::lap::CAP_USB_CDC | la::lap::CAP_MOTION | la::lap::CAP_GAIT_INTENT | la::lap::CAP_LIVE_POSE | la::lap::CAP_PERCEPTION |
+                (sd ? (uint32_t)(la::lap::CAP_SD | la::lap::CAP_FILES | la::lap::CAP_PROFILE) : 0u);
     g_link.init(io, h, self);                       // ulang dengan caps final
     la_log_main("\r\n=== Leumpang Ajeg (%s) core %u.%u.%u - ketik '?' ===\r\n", LA_BOARD_NAME,
                 la::CORE_VER_MAJOR, la::CORE_VER_MINOR, la::CORE_VER_PATCH);
@@ -166,7 +169,9 @@ int main() {
     int16_t trim[2][la::SERVO_SLOTS] = {};
     la_log_main(storage_load_cfg(&cfg, trim) ? "SD: konfigurasi + trim dimuat\r\n" : "Konfigurasi default\r\n");
     la::Platform pf{ platNow, platLog, nullptr };
-    g_ctrl.init(pf, cfg, trim, la::Controller::Options{});
+    la::Controller::Options opt;
+    opt.profile = storage_profile();                         // nullptr = bawaan KHR-3HV
+    g_ctrl.init(pf, cfg, trim, opt);
     if (sd) { storage_begin(g_ctrl.motions(), &g_bb); g_ctrl.setBlackbox(&g_bb); }
 
     const bool imuOk = imu_init();

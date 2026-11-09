@@ -32,7 +32,7 @@ void SimRobot::logLine(void* ctx, const char* line) {
     s->ep_.sendLog(line);
 }
 
-void SimRobot::start(Sink toHost, LogSink log, bool randomStart) {
+void SimRobot::start(Sink toHost, LogSink log, bool randomStart, const char* sdRoot) {
     sink_ = std::move(toHost);
     log_ = std::move(log);
     uint32_t r = 99;
@@ -76,6 +76,8 @@ void SimRobot::start(Sink toHost, LogSink log, bool randomStart) {
         return false;
     };
     h.motions = &ctrl_.motions();
+    if (sdRoot) { files_ = posixFileOps(sdRoot); h.files = files_; self.caps |= lap::CAP_FILES; }
+    h.reboot = [](void* c) { static_cast<SimRobot*>(c)->reboot_ = true; };
     ep_.init(h, self);
 
     for (int i = 0; i < BOOT_SYNC_CYCLES; ++i) { ctrl_.bootFreeCycle(servo_); now_ += 10000; }

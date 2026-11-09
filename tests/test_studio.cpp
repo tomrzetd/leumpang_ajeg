@@ -15,6 +15,8 @@
 #include <cstring>
 #include <initializer_list>
 #include <deque>
+#include <string>
+#include <unistd.h>
 
 using namespace la;
 using namespace la::studio;
@@ -320,6 +322,72 @@ int main() {
         int logs = 0; cli.onLog = [&](const std::string&) { ++logs; };
         cli.cmd(lap::CMD_RESET); run(150);
         CHECK(cli.tele.mode == (uint16_t)Mode::READY && logs > 0, "CMD_RESET -> READY, LOG diterima");
+    }
+
+    // ================= berkas SD lewat LAP (Fase 4A) =================
+    {
+        char dir[] = "/tmp/leumpang_sdXXXXXX";
+        CHECK(mkdtemp(dir) != nullptr, "folder SD sementara");
+        static SimRobot sim; static LapClient cli; std::vector<uint8_t> toSim;
+        std::vector<lap::Packet> replies;
+        cli.write = [&](const uint8_t* d, size_t n) { toSim.insert(toSim.end(), d, d + n); };
+        cli.onFileReply = [&](const lap::Packet& p) { replies.push_back(p); };
+        sim.start([](const uint8_t* d, size_t n) { cli.feed(d, n); }, nullptr, false, dir);
+        auto run = [&](int cycles) {
+            for (int i = 0; i < cycles; ++i) {
+                if (!toSim.empty()) { std::vector<uint8_t> b; b.swap(toSim); sim.fromHost(b.data(), b.size()); }
+                sim.advance(1);
+            }
+        };
+        auto status = [&](const lap::Packet& p) { return p.body[1]; };
+        cli.begin(LapClient::Rates{}); run(20);
+        CHECK(cli.haveHello && (cli.hello.caps & lap::CAP_FILES), "sim mengiklankan CAP_FILES");
+        cli.fileSimple(lap::FILE_MKDIR, 1, "scripts"); run(2);
+        CHECK(!replies.empty() && replies.back().type == lap::FILE_RESULT && status(replies.back()) == FS_OK, "mkdir scripts");
+        // unggah 1000 byte dalam potongan 160
+        std::vector<uint8_t> data(1000);
+        for (size_t i = 0; i < data.size(); ++i) data[i] = (uint8_t)(i * 7 + 3);
+        replies.clear();
+        for (size_t off = 0; off < data.size(); off += LapClient::FILE_CHUNK) {
+            const size_t k = std::min(LapClient::FILE_CHUNK, data.size() - off);
+            cli.fileWrite((uint8_t)(10 + off / 160), (uint32_t)off, off == 0, "scripts/jalan.py", data.data() + off, k);
+            run(1);
+        }
+        run(2);
+        bool allOk = replies.size() == 7;
+        for (auto& r : replies) allOk &= r.type == lap::FILE_RESULT && status(r) == FS_OK;
+        CHECK(allOk, "unggah 1000 B (7 potong) -> semua OK");
+        replies.clear();
+        cli.fileSimple(lap::FILE_STAT, 2, "scripts/jalan.py"); run(2);
+        uint32_t sz = 0; memcpy(&sz, replies.back().body + 2, 4);
+        CHECK(status(replies.back()) == FS_OK && sz == 1000, "stat: 1000 byte");
+        // unduh kembali
+        std::vector<uint8_t> got;
+        for (uint32_t off = 0;; off += 200) {
+            replies.clear(); cli.fileRead(3, off, 200, "scripts/jalan.py"); run(2);
+            const lap::Packet& r = replies.back();
+            if (r.type != lap::FILE_DATA || r.body[1] != FS_OK || r.len <= 6) break;
+            got.insert(got.end(), r.body + 6, r.body + r.len);
+        }
+        CHECK(got == data, "unduh kembali identik");
+        cli.fileWrite(4, 0, true, "scripts/b.txt", (const uint8_t*)"halo", 4); run(2);
+        replies.clear(); cli.fileList(5, 0, "scripts"); run(2);
+        const lap::Packet& l = replies.back();
+        CHECK(l.type == lap::FILE_ENTRIES && l.body[1] == FS_OK && l.body[4] == 2, "list scripts: 2 berkas");
+        replies.clear(); cli.fileRename(6, "scripts/b.txt", "scripts/c.txt"); cli.fileSimple(lap::FILE_DELETE, 7, "scripts/c.txt"); run(3);
+        CHECK(replies.size() == 2 && status(replies[0]) == FS_OK && status(replies[1]) == FS_OK, "rename + hapus");
+        replies.clear();
+        cli.fileRead(8, 0, 10, "../etc/passwd"); cli.fileSimple(lap::FILE_STAT, 9, "a/../../x"); cli.fileList(10, 0, "nope"); run(3);
+        CHECK(replies.size() == 3 && status(replies[0]) == FS_BAD_PATH && status(replies[1]) == FS_BAD_PATH &&
+              status(replies[2]) == FS_NOT_FOUND, "jalur '..' ditolak, folder tak ada = NOT_FOUND");
+        run(400);
+        cli.cmd(lap::CMD_GO); run(150);
+        cli.cmd(lap::CMD_REBOOT); run(50);
+        CHECK(!sim.rebootRequested(), "reboot ditolak saat robot tidak diam (BALANCE)");
+        cli.cmd(lap::CMD_RESET); run(150);
+        cli.cmd(lap::CMD_REBOOT); run(50);
+        CHECK(sim.rebootRequested(), "reboot diterima saat READY");
+        std::string rm = std::string("rm -rf ") + dir; CHECK(system(rm.c_str()) == 0, "bersihkan");
     }
     return checkSummary("test_studio");
 }

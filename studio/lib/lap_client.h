@@ -16,6 +16,7 @@ public:
     std::function<void(const uint8_t*, size_t)> write;      // wajib
     std::function<void(uint8_t type)> onPacket;            // setelah state diperbarui
     std::function<void(const std::string&)> onLog;
+    std::function<void(const lap::Packet&)> onFileReply;      // FILE_ENTRIES / FILE_DATA / FILE_RESULT
 
     struct Rates { uint8_t teleHz = 20, servoHz = 20, gaitHz = 30, logOn = 1; };
 
@@ -34,6 +35,13 @@ public:
     void motionPlay(uint8_t slot, bool play);
     void simImu(float rollDeg, float pitchDeg);
     void simFault(uint8_t bus, uint8_t slot, bool dead);
+    // berkas SD (Fase 4A). req = nomor permintaan, dipantulkan di balasan.
+    void fileList(uint8_t req, uint16_t start, const char* path);
+    void fileRead(uint8_t req, uint32_t offset, uint8_t len, const char* path);
+    void fileWrite(uint8_t req, uint32_t offset, bool truncate, const char* path, const uint8_t* d, size_t n);
+    void fileSimple(uint8_t type, uint8_t req, const char* path);          // FILE_DELETE / FILE_MKDIR / FILE_STAT
+    void fileRename(uint8_t req, const char* from, const char* to);
+    static constexpr size_t FILE_CHUNK = 160;
 
     // state terakhir dari robot
     bool                haveHello = false, haveTele = false, haveServo = false, haveGait = false, haveConfig = false;

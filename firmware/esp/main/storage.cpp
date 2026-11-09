@@ -5,6 +5,7 @@
 //  SDMMC tidak mematikan cache flash, jadi aman ditulis saat robot berjalan;
 //  kontrol hanya mendorong ke ring buffer dan tidak pernah menunggu kartu.
 // =============================================================================
+#include <initializer_list>
 #include "shared.h"
 
 #include <stdio.h>
@@ -148,15 +149,53 @@ void storageTask(void*) {
 
 bool storage_sd_ok() { return s_ok; }
 
-void storage_init() {
+static la::RobotProfile s_profile;
+static bool s_profileOk = false;
+static la::FileOps* s_files = nullptr;
+
+const la::RobotProfile* storage_profile() { return s_profileOk ? &s_profile : nullptr; }
+la::FileOps* storage_files() { return s_files; }
+
+static void loadProfile() {
+    const char* path = "/sd/config/robot.json";
+    static char buf[8192];
+    FILE* f = fopen(path, "rb");
+    if (!f) {                                                   // belum ada: tulis bawaan sebagai titik awal
+        const size_t n = la::writeProfile(la::defaultProfile(), buf, sizeof buf);
+        FILE* w = fopen(path, "wb");
+        if (w && n) { fwrite(buf, 1, n, w); fclose(w); logPrintf("SD: %s dibuat dari profil bawaan KHR-3HV\r\n", path); }
+        else if (w) fclose(w);
+        return;
+    }
+    const size_t n = fread(buf, 1, sizeof(buf) - 1, f);
+    fclose(f);
+    char err[128] = "";
+    if (n >= sizeof(buf) - 1) { logPrintf("SD: %s terlalu besar, pakai profil bawaan\r\n", path); return; }
+    if (!la::parseProfile(buf, n, s_profile, err, sizeof err)) {
+        logPrintf("SD: profil %s TIDAK valid (%s) - pakai profil bawaan\r\n", path, err);
+        return;
+    }
+    s_profileOk = true;
+    logPrintf("SD: profil '%s' (%s, %u servo)\r\n", s_profile.name, s_profile.humanoid() ? "humanoid-khr" : "generic",
+              (unsigned)s_profile.presentCount());
+}
+
+void storage_mount() {
 #if LA_SD_ENABLE
     s_ok = mountOnce(0);
     if (!s_ok && SD_PWR_EN >= 0) s_ok = mountOnce(1);          // polaritas EN belum pasti -> coba keduanya
-    if (!s_ok) { logPrintf("SD: tidak ada kartu / gagal mount (blackbox & motion SD nonaktif)\r\n"); return; }
+    if (!s_ok) { logPrintf("SD: tidak ada kartu / gagal mount (profil bawaan; blackbox, motion & berkas nonaktif)\r\n"); return; }
     logPrintf("SD: %s %llu MB terpasang di /sd\r\n", s_card->cid.name,
               (unsigned long long)((uint64_t)s_card->csd.capacity * s_card->csd.sector_size / (1024 * 1024)));
-    ensureDir("/sd/motions");
-    ensureDir("/sd/bbx");
+    for (const char* d : {"/sd/motions", "/sd/bbx", "/sd/config", "/sd/scripts", "/sd/poses", "/sd/rec"}) ensureDir(d);
+    loadProfile();
+    s_files = la::posixFileOps(MOUNT);
+#endif
+}
+
+void storage_init() {
+#if LA_SD_ENABLE
+    if (!s_ok) return;
     loadMotions();
 #if LA_BLACKBOX_DEFAULT
     openBlackbox();
