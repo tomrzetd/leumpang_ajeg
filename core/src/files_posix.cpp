@@ -30,11 +30,14 @@ namespace la {
 namespace {
 class PosixFs final : public FileOps {
 public:
-    explicit PosixFs(const char* root) { snprintf(root_, sizeof root_, "%s", root); }
-    bool available() override { struct stat st; return ::stat(root_, &st) == 0 && S_ISDIR(st.st_mode); }
+    // akar maks 127 karakter; lebih panjang = tidak tersedia (bukan dipotong diam-diam)
+    explicit PosixFs(const char* root) {
+        rootOk_ = (size_t)snprintf(root_, sizeof root_, "%s", root) < sizeof root_;
+    }
+    bool available() override { struct stat st; return rootOk_ && ::stat(root_, &st) == 0 && S_ISDIR(st.st_mode); }
 
     int list(const char* path, uint16_t start, FileEntry* out, int max, bool& more) override {
-        char p[160]; full(path, p);
+        char p[PATH_BUF]; full(path, p);
         int idx = 0, n = 0; more = false;
 #ifdef _WIN32
         std::error_code ec;
@@ -57,7 +60,7 @@ public:
             const size_t nl = strlen(dn);
             if (nl >= sizeof f.name) { --n; continue; }          // nama terlalu panjang untuk protokol
             memcpy(f.name, dn, nl + 1);
-            char fp[224];
+            char fp[PATH_BUF + 64];
             if ((size_t)snprintf(fp, sizeof fp, "%s/%.*s", p, (int)nl, dn) >= sizeof fp) { --n; continue; }
             struct stat st{};
             ::stat(fp, &st);
@@ -69,7 +72,7 @@ public:
         return n;
     }
     int read(const char* path, uint32_t off, uint8_t* buf, size_t len) override {
-        char p[160]; full(path, p);
+        char p[PATH_BUF]; full(path, p);
         FILE* f = fopen(p, "rb");
         if (!f) return available() ? -FS_NOT_FOUND : -FS_NO_SD;
         int r = -FS_IO;
@@ -79,7 +82,7 @@ public:
     }
     FileStatus write(const char* path, uint32_t off, const uint8_t* d, size_t n, bool trunc) override {
         if (!available()) return FS_NO_SD;
-        char p[160]; full(path, p);
+        char p[PATH_BUF]; full(path, p);
         FILE* f = fopen(p, trunc ? "wb" : "r+b");
         if (!f) return FS_NOT_FOUND;
         FileStatus st = FS_OK;
@@ -88,30 +91,32 @@ public:
         return st;
     }
     FileStatus remove(const char* path) override {
-        char p[160]; full(path, p);
+        char p[PATH_BUF]; full(path, p);
         if (path[0] == 0) return FS_DENIED;
         if (LA_UNLINK(p) == 0 || LA_RMDIR(p) == 0) return FS_OK;
         return errno == ENOENT ? FS_NOT_FOUND : FS_IO;
     }
     FileStatus mkdir(const char* path) override {
-        char p[160]; full(path, p);
+        char p[PATH_BUF]; full(path, p);
         if (LA_MKDIR(p) == 0) return FS_OK;
         return errno == EEXIST ? FS_EXISTS : FS_IO;
     }
     FileStatus rename(const char* a, const char* b) override {
-        char pa[160], pb[160]; full(a, pa); full(b, pb);
+        char pa[PATH_BUF], pb[PATH_BUF]; full(a, pa); full(b, pb);
         return ::rename(pa, pb) == 0 ? FS_OK : (errno == ENOENT ? FS_NOT_FOUND : FS_IO);
     }
     FileStatus stat(const char* path, uint32_t& size, bool& dir) override {
-        char p[160]; full(path, p);
+        char p[PATH_BUF]; full(path, p);
         struct stat st{};
         if (::stat(p, &st) != 0) return available() ? FS_NOT_FOUND : FS_NO_SD;
         dir = S_ISDIR(st.st_mode); size = dir ? 0 : (uint32_t)st.st_size;
         return FS_OK;
     }
 private:
-    void full(const char* rel, char* out) { snprintf(out, 160, "%s%s%s", root_, rel[0] ? "/" : "", rel); }
-    char root_[48];
+    static constexpr size_t PATH_BUF = 240;     // akar 127 + '/' + jalur relatif 95 (sanitizePath)
+    void full(const char* rel, char* out) { snprintf(out, PATH_BUF, "%s%s%s", root_, rel[0] ? "/" : "", rel); }
+    char root_[128];
+    bool rootOk_ = false;
 };
 }  // namespace
 
