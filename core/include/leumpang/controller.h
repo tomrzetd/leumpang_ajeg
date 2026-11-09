@@ -132,12 +132,25 @@ private:
     static int16_t* srcOf(ServoPositions& v, uint8_t b, uint8_t s);
     // ---- Fase 3: refleks rintangan ----
     bool obstacleBlocked() const;
+    // ---- Fase 4A: alat servo ICS ----
+    void toolCommand(const Command& c);
+    void toolStep(ServoBus& bus);
+    void toolResult(const Command& c, uint8_t status, int32_t value = 0, const uint8_t* data = nullptr, uint8_t len = 0);
     // ---- util ----
     int64_t now() const { return plat_.nowUs(plat_.ctx); }
     void logf(const char* fmt, ...) LA_PRINTF_FMT(2, 3);
 
     Platform       plat_{};
     Options        opt_{};
+    // Fase 4A: TOOL (satu operasi tertunda; SCAN berjalan 32 siklus)
+    Command        toolPend_{};
+    bool           toolHas_ = false;
+    int8_t         toolScanId_ = -1;
+    uint32_t       toolScanMask_[2] = {0, 0};
+    uint16_t       toolSeq_ = 0;
+    uint8_t        toolReq_ = 0, toolOp_ = 0, toolStatus_ = 0, toolBus_ = 0, toolId_ = 0, toolLen_ = 0;
+    int32_t        toolValue_ = 0;
+    uint8_t        toolData_[64] = {};
     ServoPositions servos_{};
     WalkingState   walk_{};
     RuntimeConfig  cfg_{};

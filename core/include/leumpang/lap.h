@@ -44,6 +44,8 @@ enum MsgType : uint8_t {
     MOTION_PLAY  = 0x43,
     MOTION_STATUS= 0x44,   // robot -> host: isi 4 slot
     POSE_TARGET  = 0x45,   // host -> robot (Fase 2): pose langsung, mode 820
+    SERVO_TOOL   = 0x46,   // host -> robot (Fase 4A): alat servo ICS (mode 830)
+    SERVO_TOOL_RESULT = 0x47,  // robot -> host
     FILE_LIST    = 0x80,   // host -> robot (Fase 4A): berkas SD
     FILE_READ    = 0x81, FILE_WRITE = 0x82, FILE_DELETE = 0x83, FILE_MKDIR = 0x84, FILE_RENAME = 0x85, FILE_STAT = 0x86,
     FILE_ENTRIES = 0x88,   // robot -> host
@@ -62,6 +64,7 @@ enum Caps  : uint32_t {
     CAP_WIFI = 1u << 0, CAP_SD = 1u << 1, CAP_GAIT_INTENT = 1u << 2, CAP_MOTION = 1u << 3,
     CAP_SIM = 1u << 4, CAP_LCD = 1u << 5, CAP_USB_CDC = 1u << 6, CAP_LIVE_POSE = 1u << 7,
     CAP_PERCEPTION = 1u << 8, CAP_EXT = 1u << 9, CAP_FILES = 1u << 10, CAP_PROFILE = 1u << 11,
+    CAP_SERVO_TOOL = 1u << 12,
 };
 // Flag TELEMETRY
 enum TeleFlags : uint16_t {

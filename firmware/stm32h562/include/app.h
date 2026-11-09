@@ -21,6 +21,8 @@ class Stm32IcsBus : public la::ServoBus {
 public:
     void init();
     void exchange(la::IcsExchange& x) override;
+    int  transact(uint8_t bus, const uint8_t* tx, uint8_t txLen, uint8_t* rx, uint8_t rxMax,
+                  uint8_t want, uint32_t timeoutUs) override;
 };
 
 // imu.cpp

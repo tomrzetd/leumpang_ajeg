@@ -16,7 +16,7 @@
 namespace la {
 
 // ---- Versi ----------------------------------------------------------------
-constexpr uint8_t CORE_VER_MAJOR = 0, CORE_VER_MINOR = 8, CORE_VER_PATCH = 0;
+constexpr uint8_t CORE_VER_MAJOR = 0, CORE_VER_MINOR = 9, CORE_VER_PATCH = 0;
 
 // ---- Servo ICS 3.5 ----------------------------------------------------------
 constexpr uint32_t ICS_BAUD     = 1250000;   // 8E1
@@ -67,7 +67,8 @@ enum class Mode : uint16_t {
     POSE_HOLD = 780, ANGLE_DISP = 790, MIRROR_DBG = 791,
     WALK_CONT = 800,      // Fase 1: langkah berulang atas GAIT_INTENT (EKSPERIMENTAL)
     MOTION_PLAY = 810,    // Fase 1: memutar template gerak
-    LIVE_POSE = 820       // Fase 2: pose langsung dari studio/kamera (POSE_TARGET + ttl)
+    LIVE_POSE = 820,      // Fase 2: pose langsung dari studio/kamera (POSE_TARGET + ttl)
+    TOOL = 830            // Fase 4A: alat servo ICS (scan/ID/parameter); hanya dari FALLEN, servo free
 };
 const char* modeName(Mode m);
 const char* modeShortName(Mode m);
@@ -106,7 +107,7 @@ struct ServoPositions {
 
 // ---- Perintah -------------------------------------------------------------
 enum class CmdType : uint8_t { RESET, GO, STOP, CALIBRATE, SET_PARAM, SET_TRIM,
-                               GAIT_INTENT, MOTION_PLAY, MOTION_STOP, POSE_TARGET, PERCEPTION };
+                               GAIT_INTENT, MOTION_PLAY, MOTION_STOP, POSE_TARGET, PERCEPTION, SERVO_TOOL };
 enum class ParamId : uint8_t {
     FALL_DEG, REARM_DEG, IMU_STALE_MS, SERVO_STEP, TRIGGER_ROLL_DEG,
     TRIGGER_PITCH_DEG, FOOT_LIFT, SWAY_BASE, SWAY_GAIN, SIGN_ROLL,
@@ -121,6 +122,16 @@ struct Command {
     uint16_t ttlMs;         // GAIT_INTENT / POSE_TARGET: kedaluwarsa setelah ttl
     uint32_t poseMask;      // POSE_TARGET: bit (bus*11+slot) = sendi dikendalikan
     int16_t  pose[2][SERVO_SLOTS];   // POSE_TARGET: offset sendi (ruang src)
+    uint8_t  toolOp, toolId, toolSc, toolArg, toolReq;   // SERVO_TOOL (bus = bus)
+};
+
+// ---- Fase 4A: alat servo ICS 3.5 (mode TOOL) ---------------------------------
+enum ToolOp : uint8_t {
+    TOOL_ENTER = 1, TOOL_EXIT = 2, TOOL_SCAN = 3, TOOL_READ_ID = 4, TOOL_WRITE_ID = 5,
+    TOOL_READ_PARAM = 6, TOOL_WRITE_PARAM = 7, TOOL_READ_EEPROM = 8, TOOL_READ_POS = 9
+};
+enum ToolStatus : uint8_t {
+    TOOL_OK = 0, TOOL_BAD_MODE = 1, TOOL_NO_REPLY = 2, TOOL_BAD_ARG = 3, TOOL_UNSUPPORTED = 4, TOOL_BUSY = 5
 };
 
 // ---- Masukan IMU per siklus (dari HAL) -------------------------------------
@@ -162,6 +173,11 @@ struct Telemetry {
     int8_t   motionSlot;      // -1 = tidak memutar
     uint8_t  motionFrame;
     uint32_t blackboxDropped;
+    // Fase 4A: hasil operasi TOOL terakhir (toolSeq naik per hasil)
+    uint16_t toolSeq;
+    uint8_t  toolReq, toolOp, toolStatus, toolBus, toolId, toolLen;
+    int32_t  toolValue;
+    uint8_t  toolData[64];
 };
 
 // ---- Utilitas -------------------------------------------------------------

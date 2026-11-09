@@ -57,6 +57,12 @@ private:
     void sendMotionStatus();
     void handleFile(const Packet& p);
     uint32_t rebootAtMs_ = 0;
+    void toolReply(uint8_t req, uint8_t op, uint8_t status, uint8_t bus, uint8_t id, int32_t value,
+                   const uint8_t* d, uint8_t len);
+    bool     toolWait_ = false;            // menunggu hasil SERVO_TOOL dari controller
+    uint8_t  toolReq_ = 0;
+    uint16_t toolSeq0_ = 0;
+    uint32_t toolSinceMs_ = 0;
 
     Host         h_{};
     Hello        self_{};

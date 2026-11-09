@@ -12,6 +12,20 @@ Contoh:
   lapctl.py --tcp 127.0.0.1 motion-upload wave.lam 0
   lapctl.py --tcp 127.0.0.1 motion-play 0
   lapctl.py --tcp 127.0.0.1 param gaitEnable 1 && lapctl.py --tcp 127.0.0.1 gait 8 0 5
+
+Berkas SD & profil robot (Fase 4A):
+  lapctl.py --tcp 192.168.4.1 ls scripts
+  lapctl.py --tcp 192.168.4.1 put jalan.py scripts/jalan.py
+  lapctl.py --tcp 192.168.4.1 get poses/salam.json
+  lapctl.py --tcp 192.168.4.1 profile get robot.json      (unduh /config/robot.json)
+  lapctl.py --tcp 192.168.4.1 profile put robot.json      (unggah, lalu: cmd reboot)
+
+Alat servo ICS 3.5 (robot harus FALLEN: cmd stop dulu, robot di stand):
+  lapctl.py --tcp 192.168.4.1 servo scan
+  lapctl.py --tcp 192.168.4.1 servo get R 3 stretch
+  lapctl.py --tcp 192.168.4.1 servo set R 3 speed 100
+  lapctl.py --tcp 192.168.4.1 servo id L            (HANYA satu servo terpasang di bus L!)
+  lapctl.py --tcp 192.168.4.1 servo setid L 5
 """
 import argparse
 import sys
@@ -44,6 +58,109 @@ def handshake(link: lap.Link, tele=0, servo=0, gait=0, log=1):
     return hello
 
 
+def file_cmd(link: lap.Link, a) -> int:
+    try:
+        if a.cmd == "ls":
+            for name, size, is_dir in sorted(link.file_list(a.path), key=lambda e: (not e[2], e[0])):
+                print(f"{'<DIR>' if is_dir else size:>8}  {name}{'/' if is_dir else ''}")
+        elif a.cmd == "get":
+            data = link.file_get(a.remote)
+            out = a.local or a.remote.rsplit("/", 1)[-1]
+            open(out, "wb").write(data)
+            print(f"{a.remote} -> {out} ({len(data)} B)")
+        elif a.cmd == "put":
+            data = open(a.local, "rb").read()
+            link.file_put(a.remote, data)
+            print(f"{a.local} -> {a.remote} ({len(data)} B)")
+        elif a.cmd == "rm":
+            link.file_simple(lap.FILE_DELETE, a.path)
+        elif a.cmd == "mkdir":
+            link.file_simple(lap.FILE_MKDIR, a.path)
+        elif a.cmd == "mv":
+            link.file_rename(a.src, a.dst)
+        elif a.action == "get":
+            data = link.file_get("config/robot.json")
+            open(a.file, "wb").write(data)
+            print(f"profil -> {a.file} ({len(data)} B)")
+        else:
+            data = open(a.file, "rb").read()
+            import json
+            json.loads(data)                                   # cek sintaks sebelum mengunggah
+            try:
+                link.file_simple(lap.FILE_MKDIR, "config")
+            except IOError:
+                pass                                           # sudah ada
+            link.file_put("config/robot.json", data)
+            print(f"{a.file} -> config/robot.json ({len(data)} B). Berlaku setelah: lapctl.py ... cmd reboot")
+    except (IOError, TimeoutError, ValueError) as e:
+        print("gagal:", e, file=sys.stderr)
+        return 1
+    return 0
+
+
+def _bus(s: str) -> int:
+    s = s.upper()
+    if s in ("R", "0"):
+        return 0
+    if s in ("L", "1"):
+        return 1
+    raise ValueError(f"bus '{s}' (pakai R/L)")
+
+
+def servo_cmd(link: lap.Link, a) -> int:
+    x = a.args
+    try:
+        if a.action in ("enter", "exit"):
+            st, _, _ = link.servo_tool(lap.TOOL_ENTER if a.action == "enter" else lap.TOOL_EXIT)
+        elif a.action == "scan":
+            link.servo_tool(lap.TOOL_ENTER)
+            st, _, d = link.servo_tool(lap.TOOL_SCAN, 0xFF)
+            if st == 0:
+                for b, name in ((0, "R"), (1, "L")):
+                    m = int.from_bytes(d[4 * b:4 * b + 4], "little")
+                    ids = [i for i in range(32) if m >> i & 1]
+                    print(f"bus {name}: {len(ids):2d} servo  ID {ids}")
+        else:
+            link.servo_tool(lap.TOOL_ENTER)
+            bus = _bus(x[0])
+            if a.action == "id":
+                st, v, _ = link.servo_tool(lap.TOOL_READ_ID, bus)
+                if st == 0:
+                    print(f"ID = {v}")
+            elif a.action == "setid":
+                st, v, _ = link.servo_tool(lap.TOOL_WRITE_ID, bus, 0, 0, int(x[1]))
+                if st == 0:
+                    print(f"ID baru = {v}")
+            elif a.action == "get":
+                st, v, _ = link.servo_tool(lap.TOOL_READ_PARAM, bus, int(x[1]), lap.SC_NAMES[x[2]])
+                if st == 0:
+                    print(f"{x[2]} = {v}")
+            elif a.action == "set":
+                st, v, _ = link.servo_tool(lap.TOOL_WRITE_PARAM, bus, int(x[1]), lap.SC_NAMES[x[2]], int(x[3]))
+                if st == 0:
+                    print(f"{x[2]} = {v} (RAM servo; hilang saat daya mati)")
+            elif a.action == "eeprom":
+                st, _, d = link.servo_tool(lap.TOOL_READ_EEPROM, bus, int(x[1]))
+                if st == 0:
+                    for o in range(0, len(d), 16):
+                        print(f"{o:02X}: " + " ".join(f"{b:X}" for b in d[o:o + 16]))
+            else:
+                st, v, _ = link.servo_tool(lap.TOOL_READ_POS, bus, int(x[1]))
+                if st == 0:
+                    print(f"posisi = {v}")
+    except (IndexError, KeyError, ValueError) as e:
+        print("argumen salah:", e, file=sys.stderr)
+        return 2
+    except TimeoutError as e:
+        print("timeout:", e, file=sys.stderr)
+        return 1
+    if st:
+        hint = " (cmd stop dulu: alat hanya dari FALLEN)" if st == 1 else ""
+        print("TOOL", lap.TOOL_STATUS.get(st, st) + hint, file=sys.stderr)
+        return 1
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     g = ap.add_mutually_exclusive_group(required=True)
@@ -64,6 +181,17 @@ def main() -> int:
     sub.add_parser("motions")
     gt = sub.add_parser("gait", help="kirim GAIT_INTENT berulang"); gt.add_argument("vx", type=float, help="mm/langkah")
     gt.add_argument("yaw", type=float, help="derajat/langkah"); gt.add_argument("seconds", type=float)
+    fl = sub.add_parser("ls", help="daftar berkas SD"); fl.add_argument("path", nargs="?", default="")
+    fg = sub.add_parser("get", help="unduh berkas SD"); fg.add_argument("remote"); fg.add_argument("local", nargs="?")
+    fp = sub.add_parser("put", help="unggah berkas ke SD"); fp.add_argument("local"); fp.add_argument("remote")
+    fr = sub.add_parser("rm", help="hapus berkas/folder kosong"); fr.add_argument("path")
+    fm = sub.add_parser("mkdir"); fm.add_argument("path")
+    fv = sub.add_parser("mv"); fv.add_argument("src"); fv.add_argument("dst")
+    pr = sub.add_parser("profile", help="profil robot /config/robot.json")
+    pr.add_argument("action", choices=["get", "put"]); pr.add_argument("file", nargs="?", default="robot.json")
+    sv = sub.add_parser("servo", help="alat servo ICS 3.5 (mode 830)")
+    sv.add_argument("action", choices=["enter", "exit", "scan", "id", "setid", "get", "set", "eeprom", "pos"])
+    sv.add_argument("args", nargs="*", help="bus (R/L/0/1), id, parameter (stretch/speed/current/temp), nilai")
     a = ap.parse_args()
 
     link = lap.Link(tcp=a.tcp, serial_port=a.serial)
@@ -100,6 +228,10 @@ def main() -> int:
                 elif pk.type == lap.CONFIG:
                     print("CONFIG", {k: round(v, 3) for k, v in m.values.items()}, f"gen={m.cfg_gen} saved={m.saved_gen}")
         return 0
+    if a.cmd in ("ls", "get", "put", "rm", "mkdir", "mv", "profile"):
+        return file_cmd(link, a)
+    if a.cmd == "servo":
+        return servo_cmd(link, a)
     if a.cmd == "motion-upload":
         blob = open(a.file, "rb").read()
         name, frames, _ = lap.decode_motion(blob)

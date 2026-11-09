@@ -7,6 +7,8 @@
 //  Fase 2: model servo/IMU diganti fisika MuJoCo (digital twin).
 // =============================================================================
 #include "leumpang/controller.h"
+#include "leumpang/ics_sim.h"
+#include "leumpang/files.h"
 #include "leumpang/lap_endpoint.h"
 
 #include <arpa/inet.h>
@@ -46,34 +48,14 @@ int64_t wallUs() {
 }
 
 // ---- model servo -------------------------------------------------------------
-struct ServoModel : la::ServoBus {
-    float pos[2][32]; int cmd[2][32]; bool freeT[2][32]; bool dead[2][32];
-    float speed = 120.0f;          // hitungan per 10 ms (~ 0,07 s/60 deg)
+struct ServoModel : la::IcsSimBus {
     std::mt19937 rng{42};
     void init(bool randomStart) {
-        for (int b = 0; b < 2; ++b) for (int i = 0; i < 32; ++i) {
-            const la::JointDef& j = la::JOINTS[b][i < la::SERVO_SLOTS ? i : 0];
-            pos[b][i] = randomStart ? (float)j.center + (float)((int)(rng() % 1200) - 600) : (float)j.center;
-            cmd[b][i] = 0; freeT[b][i] = true; dead[b][i] = false;
-        }
+        reset([&](int, int) { return randomStart ? (float)((int)(rng() % 1200) - 600) : 0.0f; });
     }
     void exchange(la::IcsExchange& x) override {
-        for (int b = 0; b < 2; ++b) {
-            const int id = x.tx[b][0] & 0x1F, p = (x.tx[b][1] << 7) | x.tx[b][2];
-            x.got[b] = false;
-            if (dead[b][id]) continue;
-            x.got[b] = true;
-            x.pos[b] = (int16_t)lroundf(pos[b][id]);
-            if (p == 0) freeT[b][id] = true; else { freeT[b][id] = false; cmd[b][id] = p; }
-        }
+        la::IcsSimBus::exchange(x);
         g_now += 80;                                         // ~ waktu bus nyata per slot
-    }
-    void physics() {
-        for (int b = 0; b < 2; ++b) for (int i = 0; i < la::SERVO_SLOTS; ++i) {
-            if (freeT[b][i] || dead[b][i]) continue;
-            const float d = (float)cmd[b][i] - pos[b][i];
-            pos[b][i] += d > speed ? speed : (d < -speed ? -speed : d);
-        }
     }
 } g_servo;
 
@@ -152,7 +134,8 @@ int listenOn(uint16_t port) {
 
 void usage() {
     puts("leumpang_sim [--port N] [--fast] [--seconds S] [--dead B:S] [--home-start] [--quiet] [--no-stdin]\n"
-         "             [--gait] [--blackbox file.lbb]\n"
+         "             [--gait] [--blackbox file.lbb] [--sd DIR]\n"
+         "  --sd DIR     folder sebagai kartu SD (layanan berkas FILE_*)\n"
          "  --gait       aktifkan gaitEnable (GAIT_INTENT diterima)\n"
          "  --blackbox F rekam blackbox 100 Hz ke F (format .lbb)\n"
          "  --fast       jalankan secepat mungkin (tanpa jeda real-time)\n"
@@ -168,10 +151,12 @@ int main(int argc, char** argv) {
     uint16_t port = la::lap::TCP_PORT;
     double seconds = 0;
     bool useStdin = true, randomStart = true;
+    const char* sdRoot = nullptr;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         if (a == "--port" && i + 1 < argc) port = (uint16_t)atoi(argv[++i]);
         else if (a == "--fast") g_fast = true;
+        else if (a == "--sd" && i + 1 < argc) sdRoot = argv[++i];
         else if (a == "--seconds" && i + 1 < argc) seconds = atof(argv[++i]);
         else if (a == "--quiet") g_quiet = true;
         else if (a == "--no-stdin") useStdin = false;
@@ -190,7 +175,7 @@ int main(int argc, char** argv) {
     bool deadSaved[2][32];
     memcpy(deadSaved, g_servo.dead, sizeof(deadSaved));
     g_servo.init(randomStart);
-    memcpy(g_servo.dead, deadSaved, sizeof(deadSaved));
+    for (int b = 0; b < 2; ++b) for (int i = 0; i < 32; ++i) g_servo.dead[b][i] |= deadSaved[b][i];   // --dead + ID tak terpasang
 
     la::Platform pf{ [](void*) -> int64_t { return g_now; }, logLine, nullptr };
     int16_t trim[2][la::SERVO_SLOTS] = {};
@@ -206,11 +191,13 @@ int main(int argc, char** argv) {
     la::lap::Hello self;
     self.role = la::lap::ROLE_SIM; self.board = la::lap::BOARD_SIM;
     self.fwMajor = la::CORE_VER_MAJOR; self.fwMinor = la::CORE_VER_MINOR; self.fwPatch = la::CORE_VER_PATCH;
-    self.caps = la::lap::CAP_SIM | la::lap::CAP_MOTION | la::lap::CAP_GAIT_INTENT | la::lap::CAP_LIVE_POSE | la::lap::CAP_PERCEPTION | la::lap::CAP_EXT | (g_bbFile ? (uint32_t)la::lap::CAP_SD : 0u);
+    self.caps = la::lap::CAP_SIM | la::lap::CAP_MOTION | la::lap::CAP_GAIT_INTENT | la::lap::CAP_LIVE_POSE | la::lap::CAP_PERCEPTION | la::lap::CAP_EXT | la::lap::CAP_SERVO_TOOL | (g_bbFile ? (uint32_t)la::lap::CAP_SD : 0u);
     strncpy(self.name, "leumpang-sim", 16);
     la::lap::LapEndpoint::Host h;
     h.write = epWrite; h.submit = epSubmit; h.snapshot = epSnapshot; h.simHook = epSim;
     h.motions = &g_ctrl.motions();
+    la::FileOps* sdFiles = nullptr;
+    if (sdRoot) { sdFiles = la::posixFileOps(sdRoot); h.files = sdFiles; self.caps |= la::lap::CAP_FILES; }
     h.extHook = [](void*, uint16_t topic, const uint8_t* d, size_t n) {      // Leumpang Bus: 0x0001 = echo
         return topic == 0x0001 && g_ep.sendExt(0x0001, d, n);
     };
@@ -274,6 +261,7 @@ int main(int argc, char** argv) {
     if (g_client >= 0) close(g_client);
     close(lsock);
     if (g_bbFile) fclose(g_bbFile);
+    delete sdFiles;
     la::Telemetry t; g_ctrl.snapshot(t);
     printf("leumpang_sim selesai: mode=%s overruns=%u\n", la::modeName(t.mode), (unsigned)t.loopOverruns);
     return 0;

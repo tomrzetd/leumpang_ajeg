@@ -389,5 +389,80 @@ int main() {
         CHECK(sim.rebootRequested(), "reboot diterima saat READY");
         std::string rm = std::string("rm -rf ") + dir; CHECK(system(rm.c_str()) == 0, "bersihkan");
     }
+
+    // ================= alat servo ICS 3.5 lewat LAP (Fase 4A, mode 830) =================
+    {
+        static SimRobot sim; static LapClient cli; std::vector<uint8_t> toSim;
+        std::vector<LapClient::ToolResult> res;
+        cli.write = [&](const uint8_t* d, size_t n) { toSim.insert(toSim.end(), d, d + n); };
+        cli.onToolResult = [&](const LapClient::ToolResult& r) { res.push_back(r); };
+        sim.start([](const uint8_t* d, size_t n) { cli.feed(d, n); }, nullptr, false);
+        auto run = [&](int cycles) {
+            for (int i = 0; i < cycles; ++i) {
+                static int k = 0; if (++k % 50 == 0) cli.ping();      // jaga link (timeout 3 s)
+                if (!toSim.empty()) { std::vector<uint8_t> b; b.swap(toSim); sim.fromHost(b.data(), b.size()); }
+                sim.advance(1);
+            }
+        };
+        // satu permintaan, tunggu hasil (maks 100 siklus)
+        auto tool = [&](uint8_t op, uint8_t bus = 0, uint8_t id = 0, uint8_t sc = 0, uint8_t arg = 0) {  // -> ToolResult
+            static uint8_t req = 0; ++req; res.clear();
+            cli.servoTool(req, op, bus, id, sc, arg);
+            for (int i = 0; i < 100 && res.empty(); ++i) run(1);
+            LapClient::ToolResult got{}; got.status = 0xEE;
+            if (!res.empty() && res.back().req == req) got = res.back();
+            return got;
+        };
+        cli.begin(LapClient::Rates{}); run(20);
+        CHECK(cli.haveHello && (cli.hello.caps & lap::CAP_SERVO_TOOL), "sim mengiklankan CAP_SERVO_TOOL");
+        run(300);
+        CHECK(tool(TOOL_ENTER).status == TOOL_BAD_MODE, "TOOL ditolak dari READY (servo masih bertorsi)");
+        CHECK(tool(TOOL_READ_PARAM, 0, 3, 1).status == TOOL_BAD_MODE, "operasi di luar TOOL ditolak");
+        cli.cmd(lap::CMD_STOP); run(5);
+        CHECK(tool(TOOL_ENTER).status == TOOL_OK, "TOOL dari FALLEN");
+        run(5);
+        CHECK(cli.tele.mode == (uint16_t)Mode::TOOL, "mode 830 terlihat di telemetri");
+
+        LapClient::ToolResult tr = tool(TOOL_SCAN);
+        uint32_t mr = 0, ml = 0;
+        for (int i = 0; i < 4; ++i) { mr |= (uint32_t)tr.data[i] << (8 * i); ml |= (uint32_t)tr.data[4 + i] << (8 * i); }
+        uint32_t wantR = 0, wantL = 0;
+        for (int s = 0; s < SERVO_SLOTS; ++s) { wantR |= 1u << JOINTS[0][s].id; wantL |= 1u << JOINTS[1][s].id; }
+        CHECK(tr.status == TOOL_OK && tr.len == 8 && mr == wantR && ml == wantL, "SCAN menemukan 11+11 ID sesuai profil");
+
+        CHECK(tool(TOOL_READ_ID, 0).status == TOOL_NO_REPLY, "baca ID dengan banyak servo di bus = tak ada reply sah");
+        tr = tool(TOOL_READ_PARAM, 0, 3, 1);
+        CHECK(tr.status == TOOL_OK && tr.value == 60, "baca stretch R#3 = 60");
+        tr = tool(TOOL_WRITE_PARAM, 0, 3, 2, 100);
+        CHECK(tr.status == TOOL_OK && sim.servoParam(0, 3, 2) == 100, "tulis speed R#3 = 100");
+        CHECK(tool(TOOL_WRITE_PARAM, 0, 3, 3, 64).status == TOOL_BAD_ARG, "batas arus 64 ditolak (maks 63)");
+        CHECK(tool(TOOL_WRITE_PARAM, 0, 3, 0, 1).status == TOOL_BAD_ARG, "tulis EEPROM lewat alat ditolak");
+        tr = tool(TOOL_READ_PARAM, 1, 2, 4);
+        CHECK(tr.status == TOOL_OK && tr.value == 75, "baca suhu L#2");
+        tr = tool(TOOL_READ_EEPROM, 1, 2);
+        CHECK(tr.status == TOOL_OK && tr.len == 64 && tr.data[0] == 2 && tr.data[5] == ((5 * 7 + 2) & 0x0F), "EEPROM 64 byte L#2");
+        tr = tool(TOOL_READ_POS, 0, JOINTS[0][0].id);
+        CHECK(tr.status == TOOL_OK && tr.value >= 3500 && tr.value <= 11500, "baca posisi servo free");
+        CHECK(tool(TOOL_READ_PARAM, 0, 25, 1).status == TOOL_NO_REPLY, "ID tak terpasang = NO_REPLY");
+
+        res.clear(); cli.servoTool(200, TOOL_SCAN); cli.servoTool(201, TOOL_READ_ID, 0); run(60);
+        bool busy = false, scan = false;
+        for (auto& r : res) { busy |= r.req == 201 && r.status == TOOL_BUSY; scan |= r.req == 200 && r.status == TOOL_OK; }
+        CHECK(busy && scan, "permintaan kedua saat SCAN = BUSY, SCAN tetap selesai");
+
+        const uint8_t only = JOINTS[1][4].id;
+        for (int i = 0; i < 32; ++i) if (i != only) sim.setServoPresent(1, i, false);
+        tr = tool(TOOL_READ_ID, 1);
+        CHECK(tr.status == TOOL_OK && tr.value == only, "baca ID: satu servo di bus L");
+        tr = tool(TOOL_WRITE_ID, 1, 0, 0, 20);
+        CHECK(tr.status == TOOL_OK && tr.value == 20 && sim.servoPresent(1, 20) && !sim.servoPresent(1, only), "tulis ID -> 20");
+        CHECK(tool(TOOL_WRITE_ID, 1, 0, 0, 32).status == TOOL_BAD_ARG, "ID 32 ditolak");
+
+        cli.cmd(lap::CMD_RESET); run(10);
+        CHECK(cli.tele.mode == (uint16_t)Mode::TOOL, "RESET ditolak selama TOOL");
+        CHECK(tool(TOOL_EXIT).status == TOOL_OK, "TOOL_EXIT");
+        run(5);
+        CHECK(cli.tele.mode == (uint16_t)Mode::FALLEN, "keluar TOOL -> FALLEN");
+    }
     return checkSummary("test_studio");
 }

@@ -27,6 +27,7 @@ simulator, studio desktop dengan digital twin 3D, serta protokol bersama untuk H
 | Model 3D parametrik (STL + URDF) | ✅ |
 | **Leumpang Mata** (Android): hindari rintangan, ikuti orang, isyarat tangan, wajah/objek, suara | ✅ kode + CI; ⏳ uji di HP |
 | Refleks rintangan firmware (`PERCEPTION`) + Leumpang Bus API (`EXT`, WebSocket) | ✅ simulasi |
+| **Platform servo umum**: profil robot di SD, berkas SD lewat LAP, alat servo ICS 3.5 | ✅ simulasi (Fase 4A) |
 
 Lihat [docs/ROADMAP.md](docs/ROADMAP.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
@@ -40,7 +41,12 @@ ctest --test-dir build --output-on-failure        # semua tes
 python3 tools/lapctl.py --tcp 127.0.0.1 watch --servo
 python3 tools/lapctl.py --tcp 127.0.0.1 cmd go
 python3 tools/lapctl.py --tcp 127.0.0.1 sim-imu 0 40
+
+./build/leumpang_sim --sd /tmp/sd                 # dengan "kartu SD" (berkas, profil)
+python3 tools/lapctl.py --tcp 127.0.0.1 ls
+python3 tools/lapctl.py --tcp 127.0.0.1 cmd stop && python3 tools/lapctl.py --tcp 127.0.0.1 servo scan
 ```
+Profil robot & robot selain KHR: [docs/PROFILE.md](docs/PROFILE.md).
 Di terminal simulator Anda juga bisa mengetik perintah konsol robot (`r g x c t y z ?`).
 
 ## Leumpang Studio (desktop)

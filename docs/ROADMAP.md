@@ -51,3 +51,18 @@ cek titik berat untuk gerak kaki dari editor, model pose 3D (sekarang 2D + estim
 **Belum / berikutnya:** uji di Xiaomi 12 Pro + robot; jalur UVC berbasis libusb untuk HP yang tidak mengekspos kamera
 eksternal; kedalaman monokular (model depth) untuk lantai bertekstur ramai; klasifikasi suara lingkungan; pasang
 `extHook` sensor nyata di HAL ESP32/STM32; studio sebagai klien Leumpang Bus (lihat apa yang dilihat robot).
+
+## Fase 4 — Platform servo controller (berjalan)
+Keputusan: board utama **ESP32-P4**, servo **KRS-2552/3204/3304 (ICS 3.5)**, skrip **MicroPython** di SD,
+stik **PS4 lewat ESP32 klasik** (Bluepad32), Wi-Fi hanya untuk desktop, HP hanya lewat USB OTG.
+
+* **4A ✅ (kode + simulasi; ⏳ uji hardware)** — core 0.9.0
+  * Profil robot `config/robot.json` ([PROFILE.md](PROFILE.md)): `humanoid-khr` atau `generic` (robot lain), ID/arah/batas/HOME per servo.
+  * Layanan berkas SD lewat LAP (`FILE_*`), `CMD reboot`; ESP P4/S3 (VFS) dan STM32 (FatFs LFN).
+  * Alat servo ICS 3.5 (mode 830, `SERVO_TOOL`): scan ID, baca/tulis ID, stretch/speed/batas arus/suhu, baca EEPROM, posisi.
+  * `lapctl`: `ls/get/put/rm/mkdir/mv`, `profile get|put`, `servo scan|id|setid|get|set|eeprom|pos`.
+  * Teruji: profil 19 cek, studio/LAP 68 cek, Python lintas-bahasa (lapctl lawan `leumpang_sim --sd`).
+* **4B** Leumpang Radio: ESP32 klasik + Bluepad32, pesan PAD, pemetaan PS4 (L1 deadman, touchpad/PS = E-STOP), jembatan Wi-Fi untuk STM32.
+* **4C** MicroPython tertanam + modul `leumpang` + `autorun.py` + Run/Stop/konsol dari desktop.
+* **4D** Studio v2: pengelola berkas, wizard kalibrasi, editor skrip, editor node (→ MicroPython), simulasi gait realtime, profil dari robot.
+* **4E** Indra HP (rintangan, orang, isyarat, suara) bisa dibaca skrip.

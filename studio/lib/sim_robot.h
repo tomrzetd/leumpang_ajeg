@@ -6,6 +6,7 @@
 // =============================================================================
 #pragma once
 #include "leumpang/controller.h"
+#include "leumpang/ics_sim.h"
 #include "leumpang/lap_endpoint.h"
 #include "leumpang/files.h"
 
@@ -27,13 +28,13 @@ public:
     int64_t nowUs() const { return now_; }
     void setImu(float rollDeg, float pitchDeg) { rollDeg_ = rollDeg; pitchDeg_ = pitchDeg; }
     const Controller& controller() const { return ctrl_; }
+    // Fase 4A: uji alat servo - matikan/hidupkan servo tiruan per ID
+    void setServoPresent(int bus, int id, bool on) { servo_.dead[bus][id] = !on; }
+    bool servoPresent(int bus, int id) const { return !servo_.dead[bus][id]; }
+    uint8_t servoParam(int bus, int id, int sc) const { return servo_.param[bus][id][sc]; }
 
 private:
-    struct Servo : ServoBus {
-        float pos[2][32]; int cmd[2][32]; bool freeT[2][32]; bool dead[2][32];
-        void exchange(IcsExchange& x) override;
-        void physics();
-    };
+    struct Servo : IcsSimBus {};
     struct Box : Inbox {
         std::deque<char> keys; std::deque<Command> cmds;
         bool nextKey(char& c) override;

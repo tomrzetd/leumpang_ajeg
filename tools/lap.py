@@ -21,17 +21,29 @@ CMD, SET_PARAM, SET_TRIM, STREAM_CFG = 0x20, 0x21, 0x22, 0x23
 GAIT_INTENT, PERCEPTION = 0x30, 0x31
 MOTION_BEGIN, MOTION_CHUNK, MOTION_END, MOTION_PLAY, MOTION_STATUS = 0x40, 0x41, 0x42, 0x43, 0x44
 POSE_TARGET = 0x45
+SERVO_TOOL, SERVO_TOOL_RESULT = 0x46, 0x47
 SIM_IMU, SIM_FAULT = 0x70, 0x71
+FILE_LIST, FILE_READ, FILE_WRITE, FILE_DELETE, FILE_MKDIR, FILE_RENAME, FILE_STAT = range(0x80, 0x87)
+FILE_ENTRIES, FILE_DATA, FILE_RESULT = 0x88, 0x89, 0x8A
 
-TYPE_NAMES = {v: k for k, v in dict(globals()).items() if k.isupper() and isinstance(v, int) and 0 < v < 0x80
+TYPE_NAMES = {v: k for k, v in dict(globals()).items() if k.isupper() and isinstance(v, int) and 0 < v < 0x100
               and k not in ("VERSION", "MAX_BODY", "TCP_PORT")}
 
 ACK_STATUS = {0: "OK", 1: "BAD_LEN", 2: "UNSUPPORTED", 3: "REJECTED_STATE", 4: "BUSY", 5: "BAD_VALUE"}
 ROLE_ROBOT, ROLE_PHONE, ROLE_DESKTOP, ROLE_SIM, ROLE_TOOL = range(5)
 BOARDS = {0: "unknown", 1: "esp32s3", 2: "esp32p4", 3: "stm32h562", 4: "sim"}
-CMD_RESET, CMD_GO, CMD_STOP, CMD_CAL, CMD_GET_CONFIG, CMD_HELLO, CMD_MOTION_LIST = range(7)
+CMD_RESET, CMD_GO, CMD_STOP, CMD_CAL, CMD_GET_CONFIG, CMD_HELLO, CMD_MOTION_LIST, CMD_REBOOT = range(8)
 CMD_NAMES = {"reset": CMD_RESET, "go": CMD_GO, "stop": CMD_STOP, "cal": CMD_CAL, "config": CMD_GET_CONFIG,
-             "motions": CMD_MOTION_LIST}
+             "motions": CMD_MOTION_LIST, "reboot": CMD_REBOOT}
+CAP_FILES, CAP_PROFILE, CAP_SERVO_TOOL = 1 << 10, 1 << 11, 1 << 12
+
+# ---- Fase 4A: berkas SD & alat servo ICS ----
+FS_STATUS = {0: "OK", 1: "NOT_FOUND", 2: "IO", 3: "BAD_PATH", 4: "NO_SD", 5: "DENIED", 6: "EXISTS"}
+FILE_CHUNK = 160
+TOOL_ENTER, TOOL_EXIT, TOOL_SCAN, TOOL_READ_ID, TOOL_WRITE_ID = 1, 2, 3, 4, 5
+TOOL_READ_PARAM, TOOL_WRITE_PARAM, TOOL_READ_EEPROM, TOOL_READ_POS = 6, 7, 8, 9
+TOOL_STATUS = {0: "OK", 1: "BAD_MODE", 2: "NO_REPLY", 3: "BAD_ARG", 4: "UNSUPPORTED", 5: "BUSY"}
+SC_NAMES = {"stretch": 1, "speed": 2, "current": 3, "temp": 4}
 
 # urutan = enum la::ParamId
 PARAMS = ["fallDeg", "rearmDeg", "imuStaleMs", "servoStep", "trigRollDeg", "trigPitchDeg",
@@ -42,7 +54,7 @@ TF_IMU_FRESH, TF_IMU_INIT, TF_CAL_DONE, TF_PERSIST_PENDING, TF_JIKU_LEFT, TF_INT
 
 MODES = {700: "RAW_ANGLES", 705: "FALLEN", 710: "RESET", 720: "READY", 730: "BALANCE", 740: "WALK_INIT",
          750: "WALK_HOLD", 760: "WALK_STEP", 770: "WALK_END", 780: "POSE_HOLD", 790: "ANGLE_DISP",
-         791: "MIRROR_DBG", 800: "WALK_CONT", 810: "MOTION_PLAY", 820: "LIVE_POSE"}
+         791: "MIRROR_DBG", 800: "WALK_CONT", 810: "MOTION_PLAY", 820: "LIVE_POSE", 830: "TOOL"}
 PERCEPTION, EXT = 0x31, 0x60
 
 JOINT_NAMES = [
@@ -497,6 +509,117 @@ class Link:
             if not a or a.status:
                 return a
         return self.request(MOTION_END, pk_motion_end(slot, save))
+
+    # ---- Fase 4A: menunggu balasan bertanda req (FILE_* / SERVO_TOOL_RESULT) ----
+    def _reply(self, types, req: int, timeout: float):
+        import time
+        end = time.time() + timeout
+        while time.time() < end:
+            for p in self.recv(0.05):
+                if p.type in types and p.body and p.body[0] == req:
+                    return p
+                self.pending.append(p)
+        return None
+
+    def _req(self) -> int:
+        self._r = (getattr(self, "_r", 0) + 1) & 0xFF
+        return self._r
+
+    def file_list(self, path: str = ""):
+        """[(nama, ukuran, dir)] atau raise IOError(status)."""
+        out, start = [], 0
+        while True:
+            r = self._req()
+            self.send(FILE_LIST, struct.pack("<BH", r, start) + path.encode())
+            p = self._reply((FILE_ENTRIES, FILE_RESULT), r, 2)
+            if p is None:
+                raise TimeoutError("FILE_LIST")
+            if p.type == FILE_RESULT or p.body[1]:
+                raise IOError(FS_STATUS.get(p.body[1], p.body[1]))
+            _, _, _, count, more = struct.unpack_from("<BBHBB", p.body)
+            o = 6
+            for _ in range(count):
+                d, size, n = struct.unpack_from("<BIB", p.body, o)
+                o += 6
+                out.append((p.body[o:o + n].decode(errors="replace"), size, bool(d)))
+                o += n
+            start += count
+            if not more or count == 0:
+                return out
+
+    def file_stat(self, path: str):
+        """(ukuran, dir) atau raise IOError."""
+        r = self._req()
+        self.send(FILE_STAT, bytes([r]) + path.encode())
+        st, val, extra = self._result(r)
+        if st:
+            raise IOError(FS_STATUS.get(st, st))
+        return val, bool(extra)
+
+    def _result(self, r: int, timeout: float = 2):
+        p = self._reply((FILE_RESULT,), r, timeout)
+        if p is None:
+            raise TimeoutError("FILE_RESULT")
+        _, st, val, extra = struct.unpack_from("<BBIB", p.body)
+        return st, val, extra
+
+    def file_get(self, path: str) -> bytes:
+        size, is_dir = self.file_stat(path)
+        if is_dir:
+            raise IOError("folder")
+        data = bytearray()
+        while len(data) < size:
+            r = self._req()
+            n = min(200, size - len(data))
+            self.send(FILE_READ, struct.pack("<BIB", r, len(data), n) + path.encode())
+            p = self._reply((FILE_DATA, FILE_RESULT), r, 2)
+            if p is None:
+                raise TimeoutError("FILE_READ")
+            if p.type == FILE_RESULT or p.body[1]:
+                raise IOError(FS_STATUS.get(p.body[1], p.body[1]))
+            chunk = p.body[6:]
+            if not chunk:
+                break
+            data += chunk
+        return bytes(data)
+
+    def file_put(self, path: str, data: bytes) -> None:
+        pb = path.encode()
+        off = 0
+        while True:
+            chunk = data[off:off + FILE_CHUNK]
+            r = self._req()
+            self.send(FILE_WRITE, struct.pack("<BIBB", r, off, 1 if off == 0 else 0, len(pb)) + pb + chunk)
+            st, _, _ = self._result(r)
+            if st:
+                raise IOError(FS_STATUS.get(st, st))
+            off += len(chunk)
+            if off >= len(data):
+                return
+
+    def file_simple(self, type_: int, path: str) -> None:
+        r = self._req()
+        self.send(type_, bytes([r]) + path.encode())
+        st, _, _ = self._result(r)
+        if st:
+            raise IOError(FS_STATUS.get(st, st))
+
+    def file_rename(self, a: str, b: str) -> None:
+        r = self._req()
+        self.send(FILE_RENAME, bytes([r, len(a.encode())]) + a.encode() + b.encode())
+        st, _, _ = self._result(r)
+        if st:
+            raise IOError(FS_STATUS.get(st, st))
+
+    def servo_tool(self, op: int, bus: int = 0, id_: int = 0, sc: int = 0, arg: int = 0, timeout: float = 3):
+        """Kembalikan (status, value, data). status = kunci TOOL_STATUS."""
+        r = self._req()
+        self.send(SERVO_TOOL, bytes([r, op, bus & 0xFF, id_, sc, arg]))
+        p = self._reply((SERVO_TOOL_RESULT,), r, timeout)
+        if p is None:
+            raise TimeoutError("SERVO_TOOL")
+        _, _, st, _, _, val, n = struct.unpack_from("<BBBBBiB", p.body)
+        return st, val, bytes(p.body[10:10 + n])
 
     def close(self) -> None:
         (self.sock or self.ser).close()

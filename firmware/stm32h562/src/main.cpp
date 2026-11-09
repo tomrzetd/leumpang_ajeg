@@ -159,7 +159,7 @@ int main() {
     g_link.init(io, h, self);                       // log tersedia sejak awal (USB mungkin belum enumerasi)
     const bool sd = storage_mount();
     h.files = storage_files();                      // FatFs; dipanggil dari main loop seperti operasi SD lain
-    self.caps = la::lap::CAP_USB_CDC | la::lap::CAP_MOTION | la::lap::CAP_GAIT_INTENT | la::lap::CAP_LIVE_POSE | la::lap::CAP_PERCEPTION |
+    self.caps = la::lap::CAP_USB_CDC | la::lap::CAP_MOTION | la::lap::CAP_GAIT_INTENT | la::lap::CAP_LIVE_POSE | la::lap::CAP_PERCEPTION | la::lap::CAP_SERVO_TOOL |
                 (sd ? (uint32_t)(la::lap::CAP_SD | la::lap::CAP_FILES | la::lap::CAP_PROFILE) : 0u);
     g_link.init(io, h, self);                       // ulang dengan caps final
     la_log_main("\r\n=== Leumpang Ajeg (%s) core %u.%u.%u - ketik '?' ===\r\n", LA_BOARD_NAME,

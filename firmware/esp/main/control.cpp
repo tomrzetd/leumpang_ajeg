@@ -74,6 +74,9 @@ public:
     }
 
     // Kirim R+L bersamaan, tunggu TX selesai (polling), pindah ke RX, early-exit saat reply valid.
+    int transact(uint8_t bus, const uint8_t* tx, uint8_t txLen, uint8_t* rx, uint8_t rxMax,
+                 uint8_t want, uint32_t timeoutUs) override;
+
     void exchange(la::IcsExchange& x) override {
         for (uint8_t b = 0; b < 2; ++b) { uart_flush_input(ICS_PORT[b]); icsDirTx(b, true); x.got[b] = false; }
         for (uint8_t b = 0; b < 2; ++b) uart_write_bytes(ICS_PORT[b], x.tx[b], 3);
@@ -96,6 +99,27 @@ public:
         }
     }
 };
+
+// Mode TOOL (Fase 4A): satu transaksi panjang di satu bus (ID/parameter/EEPROM).
+int EspIcsBus::transact(uint8_t bus, const uint8_t* tx, uint8_t txLen, uint8_t* rx, uint8_t rxMax,
+                        uint8_t want, uint32_t timeoutUs) {
+    if (bus > 1) return 0;
+    const uart_port_t p = ICS_PORT[bus];
+    uart_flush_input(p); icsDirTx(bus, true);
+    uart_write_bytes(p, tx, txLen);
+    uart_wait_tx_idle_polling(p); icsDirTx(bus, false);
+    size_t n = 0;
+    const int64_t deadline = esp_timer_get_time() + (int64_t)timeoutUs;
+    while (n < rxMax && esp_timer_get_time() < deadline) {
+        size_t avail = 0;
+        if (uart_get_buffered_data_len(p, &avail) != ESP_OK || avail == 0) continue;
+        const size_t room = rxMax - n;
+        const int r = uart_read_bytes(p, rx + n, (uint32_t)(avail < room ? avail : room), 0);
+        if (r > 0) n += (size_t)r;
+        if (la::ics::replyComplete(rx, n, tx, txLen, want)) break;
+    }
+    return (int)n;
+}
 
 // ============================================================================
 //  Inbox & platform

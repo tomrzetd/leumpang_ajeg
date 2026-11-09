@@ -45,6 +45,15 @@ void LapClient::handle(const Packet& p) {
         case CONFIG:        haveConfig = parsePacket(p, config); break;
         case MOTION_STATUS: parsePacket(p, motions); break;
         case ACK:           parsePacket(p, lastAck); break;
+        case SERVO_TOOL_RESULT: {
+            Reader r(p.body, p.len);
+            ToolResult t{};
+            t.req = r.u8(); t.op = r.u8(); t.status = r.u8(); t.bus = r.u8(); t.id = r.u8();
+            t.value = (int32_t)r.u32(); t.len = r.u8();
+            for (uint8_t i = 0; i < t.len && i < 64 && r.remaining(); ++i) t.data[i] = r.u8();
+            if (r.ok() && onToolResult) onToolResult(t);
+            break;
+        }
         case FILE_ENTRIES: case FILE_DATA: case FILE_RESULT:
             if (onFileReply) onFileReply(p);
             break;
@@ -103,6 +112,10 @@ void LapClient::fileWrite(uint8_t req, uint32_t off, bool trunc, const char* pat
 void LapClient::fileSimple(uint8_t type, uint8_t req, const char* path) {
     Packet p; p.type = type; p.seq = seq_++; Writer w(p.body, MAX_BODY);
     w.u8(req); w.bytes(path, strlen(path)); p.len = (uint8_t)w.size(); sendPacket(p);
+}
+void LapClient::servoTool(uint8_t req, uint8_t op, uint8_t bus, uint8_t id, uint8_t sc, uint8_t arg) {
+    Packet p; p.type = SERVO_TOOL; p.seq = seq_++; Writer w(p.body, MAX_BODY);
+    w.u8(req); w.u8(op); w.u8(bus); w.u8(id); w.u8(sc); w.u8(arg); p.len = (uint8_t)w.size(); sendPacket(p);
 }
 void LapClient::fileRename(uint8_t req, const char* a, const char* b) {
     Packet p; p.type = FILE_RENAME; p.seq = seq_++; Writer w(p.body, MAX_BODY);

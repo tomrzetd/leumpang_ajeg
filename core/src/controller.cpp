@@ -31,6 +31,7 @@ const char* modeName(Mode m) {
         case Mode::WALK_CONT:  return "WALK_CONT";
         case Mode::MOTION_PLAY:return "MOTION_PLAY";
         case Mode::LIVE_POSE:  return "LIVE_POSE";
+        case Mode::TOOL:       return "TOOL";
     }
     return "UNKNOWN";
 }
@@ -51,6 +52,7 @@ const char* modeShortName(Mode m) {
         case Mode::WALK_CONT:  return "WALK CONT";
         case Mode::MOTION_PLAY:return "MOTION";
         case Mode::LIVE_POSE:  return "LIVE POSE";
+        case Mode::TOOL:       return "SERVO TOOL";
     }
     return "UNKNOWN";
 }
@@ -59,7 +61,8 @@ bool modeIsGait(Mode m) {
            m == Mode::WALK_CONT;
 }
 bool modePersistSafe(Mode m) {
-    return m == Mode::READY || m == Mode::FALLEN || m == Mode::ANGLE_DISP || m == Mode::RAW_ANGLES;
+    return m == Mode::READY || m == Mode::FALLEN || m == Mode::ANGLE_DISP || m == Mode::RAW_ANGLES ||
+           m == Mode::TOOL;
 }
 
 RuntimeConfig runtimeConfigDefault() {
@@ -360,6 +363,7 @@ void Controller::startReset(const char* why, int16_t cycles) {
     logf("RESET: %s\r\n", why);
 }
 bool Controller::manualReset(const char* why) {
+    if (walk_.mode == Mode::TOOL) { logf("RESET ditolak: keluar dari TOOL dulu (STOP / TOOL_EXIT)\r\n"); return false; }
     if (walk_.mode == Mode::FALLEN) {
         if (!imuFresh() || fabsf(roll_) >= cfg_.rearmAngleRad || fabsf(pitch_) >= cfg_.rearmAngleRad) {
             logf("RESET ditolak: robot FALLEN belum tegak / IMU tidak fresh\r\n");
@@ -626,6 +630,7 @@ void Controller::walkControl() {
         case Mode::WALK_CONT:   walkContStep(); break;
         case Mode::MOTION_PLAY: motionStep();   break;
         case Mode::LIVE_POSE:   livePoseStep(); break;
+        case Mode::TOOL:        break;            // toolStep() dipanggil dari step()
         case Mode::FALLEN:
             if (opt_.autoRearm) {
                 if (imuFresh() && fabsf(roll_) < cfg_.rearmAngleRad && fabsf(pitch_) < cfg_.rearmAngleRad) {
@@ -786,6 +791,7 @@ void Controller::handleCommand(const Command& c) {
         case CmdType::MOTION_STOP:
             if (walk_.mode == Mode::MOTION_PLAY) motionEnd(false, "dihentikan");
             break;
+        case CmdType::SERVO_TOOL: toolCommand(c); break;
     }
 }
 
@@ -816,7 +822,9 @@ void Controller::step(const ImuInput& imuIn, ServoBus& bus, Inbox& inbox) {
     walkControl();
     if (!walkStateFinite()) { initWalkState(); startReset("nilai NaN/Inf pada state jalan"); }
 
-    if (walk_.mode == Mode::FALLEN) {
+    if (walk_.mode == Mode::TOOL) {
+        toolStep(bus);                                          // servo tetap free; bus milik alat
+    } else if (walk_.mode == Mode::FALLEN) {
         if ((freeTick_++ % 10) == 0) sendAllServoFree(bus);    // ~10 Hz + feedback posisi
     } else {
         freeTick_ = 0;
@@ -858,6 +866,113 @@ void Controller::snapshot(Telemetry& t) const {
     t.intentVx = gaitStride_; t.intentYawDeg = gaitYaw_ * kRad2Deg;
     t.motionSlot = motSlot_; t.motionFrame = motFrame_;
     t.blackboxDropped = bb_ ? bb_->dropped() : 0;
+    t.toolSeq = toolSeq_; t.toolReq = toolReq_; t.toolOp = toolOp_; t.toolStatus = toolStatus_;
+    t.toolBus = toolBus_; t.toolId = toolId_; t.toolLen = toolLen_; t.toolValue = toolValue_;
+    memcpy(t.toolData, toolData_, sizeof(toolData_));
+}
+
+// ============================================================================
+//  Fase 4A: alat servo ICS 3.5 (mode TOOL)
+//  Masuk hanya dari FALLEN (servo sudah free -> robot tidak ambruk mendadak).
+//  Satu operasi per siklus; hasil dipublikasikan lewat Telemetry.toolSeq.
+//  Keluar: TOOL_EXIT / STOP -> FALLEN (lalu 'r' seperti biasa).
+// ============================================================================
+void Controller::toolResult(const Command& c, uint8_t status, int32_t value, const uint8_t* data, uint8_t len) {
+    toolReq_ = c.toolReq; toolOp_ = c.toolOp; toolStatus_ = status; toolBus_ = c.bus; toolId_ = c.toolId;
+    toolValue_ = value;
+    toolLen_ = len > sizeof(toolData_) ? (uint8_t)sizeof(toolData_) : len;
+    if (data && toolLen_) memcpy(toolData_, data, toolLen_);
+    ++toolSeq_;
+}
+
+void Controller::toolCommand(const Command& c) {
+    if (c.toolOp == TOOL_ENTER) {
+        if (walk_.mode == Mode::TOOL) { toolResult(c, TOOL_OK); return; }
+        if (walk_.mode != Mode::FALLEN) {
+            logf("TOOL ditolak: hanya dari FALLEN (STOP dulu, robot di stand)\r\n");
+            toolResult(c, TOOL_BAD_MODE); return;
+        }
+        walk_.mode = Mode::TOOL; toolHas_ = false; toolScanId_ = -1;
+        logf("mode=830 [Servo TOOL] - servo free, bus untuk alat\r\n");
+        toolResult(c, TOOL_OK); return;
+    }
+    if (c.toolOp == TOOL_EXIT) {
+        if (walk_.mode == Mode::TOOL) { toolHas_ = false; toolScanId_ = -1; enterFallen("TOOL selesai"); }
+        toolResult(c, TOOL_OK); return;
+    }
+    if (walk_.mode != Mode::TOOL) { toolResult(c, TOOL_BAD_MODE); return; }
+    if (toolHas_ || toolScanId_ >= 0) { toolResult(c, TOOL_BUSY); return; }
+    const bool needBus = c.toolOp != TOOL_SCAN;
+    if ((needBus && c.bus > 1) || c.toolId > ics::MAX_ID || c.toolOp < TOOL_SCAN || c.toolOp > TOOL_READ_POS) {
+        toolResult(c, TOOL_BAD_ARG); return;
+    }
+    if (c.toolOp == TOOL_READ_PARAM && (c.toolSc < ics::SC_STRETCH || c.toolSc > ics::SC_TEMP)) { toolResult(c, TOOL_BAD_ARG); return; }
+    if (c.toolOp == TOOL_WRITE_PARAM && !ics::paramWritable(c.toolSc, c.toolArg)) { toolResult(c, TOOL_BAD_ARG); return; }
+    if (c.toolOp == TOOL_WRITE_ID && c.toolArg > ics::MAX_ID) { toolResult(c, TOOL_BAD_ARG); return; }
+    toolPend_ = c; toolHas_ = true;
+    if (c.toolOp == TOOL_SCAN) { toolScanId_ = 0; toolScanMask_[0] = toolScanMask_[1] = 0; toolHas_ = false; }
+}
+
+void Controller::toolStep(ServoBus& bus) {
+    const int64_t t0 = now();
+    if (toolScanId_ >= 0) {                                  // satu ID per siklus, dua bus sekaligus
+        IcsExchange x{};
+        for (uint8_t b = 0; b < 2; ++b) ics::buildPosition(x.tx[b], (uint8_t)toolScanId_, 0);
+        bus.exchange(x);
+        for (uint8_t b = 0; b < 2; ++b) if (x.got[b]) toolScanMask_[b] |= 1u << toolScanId_;
+        if (++toolScanId_ > (int8_t)ics::MAX_ID) {
+            toolScanId_ = -1;
+            uint8_t d[8];
+            for (int i = 0; i < 4; ++i) { d[i] = (uint8_t)(toolScanMask_[0] >> (8 * i)); d[4 + i] = (uint8_t)(toolScanMask_[1] >> (8 * i)); }
+            Command c = toolPend_; c.bus = 0xFF;
+            logf("TOOL scan: R=0x%08lx L=0x%08lx\r\n", (unsigned long)toolScanMask_[0], (unsigned long)toolScanMask_[1]);
+            toolResult(c, TOOL_OK, 0, d, 8);
+        }
+        servoPhaseUs_ = (uint32_t)(now() - t0);
+        return;
+    }
+    if (!toolHas_) return;
+    toolHas_ = false;
+    const Command& c = toolPend_;
+    uint8_t tx[4], rx[80], v[ics::EEPROM_LEN];
+    uint8_t txLen = 0, want = 0;
+    switch (c.toolOp) {
+        case TOOL_READ_ID:     txLen = ics::buildIdRead(tx); want = 1; break;
+        case TOOL_WRITE_ID:    txLen = ics::buildIdWrite(tx, c.toolArg); want = 1; break;
+        case TOOL_READ_PARAM:  txLen = ics::buildRead(tx, c.toolId, c.toolSc); want = ics::readReplyLen(c.toolSc); break;
+        case TOOL_READ_EEPROM: txLen = ics::buildRead(tx, c.toolId, ics::SC_EEPROM); want = ics::readReplyLen(ics::SC_EEPROM); break;
+        case TOOL_WRITE_PARAM: txLen = ics::buildWrite(tx, c.toolId, c.toolSc, c.toolArg); want = 3; break;
+        case TOOL_READ_POS:    ics::buildPosition(tx, c.toolId, 0); txLen = 3; want = 3; break;
+        default: toolResult(c, TOOL_BAD_ARG); return;
+    }
+    const uint32_t tmo = c.toolOp == TOOL_READ_EEPROM ? 3000u : 1000u;
+    const int n = bus.transact(c.bus, tx, txLen, rx, sizeof(rx), want, tmo);
+    servoPhaseUs_ = (uint32_t)(now() - t0);
+    if (n < 0) { toolResult(c, TOOL_UNSUPPORTED); return; }
+    const size_t nn = (size_t)n;
+    switch (c.toolOp) {
+        case TOOL_READ_ID: case TOOL_WRITE_ID: {
+            uint8_t id;
+            if (!ics::parseId(rx, nn, tx, &id)) { toolResult(c, TOOL_NO_REPLY); return; }
+            if (c.toolOp == TOOL_WRITE_ID) logf("TOOL: ID servo bus %c -> %u\r\n", c.bus ? 'L' : 'R', (unsigned)id);
+            toolResult(c, TOOL_OK, id); return;
+        }
+        case TOOL_READ_PARAM:
+            if (!ics::parseRead(rx, nn, tx, c.toolSc, v)) { toolResult(c, TOOL_NO_REPLY); return; }
+            toolResult(c, TOOL_OK, v[0]); return;
+        case TOOL_READ_EEPROM:
+            if (!ics::parseRead(rx, nn, tx, ics::SC_EEPROM, v)) { toolResult(c, TOOL_NO_REPLY); return; }
+            toolResult(c, TOOL_OK, ics::EEPROM_LEN, v, ics::EEPROM_LEN); return;
+        case TOOL_WRITE_PARAM:
+            if (!ics::parseWrite(rx, nn, tx)) { toolResult(c, TOOL_NO_REPLY); return; }
+            toolResult(c, TOOL_OK, c.toolArg); return;
+        case TOOL_READ_POS: {
+            int16_t pos;
+            if (!ics::parseReply(rx, nn, tx, &pos)) { toolResult(c, TOOL_NO_REPLY); return; }
+            toolResult(c, TOOL_OK, pos); return;
+        }
+        default: return;
+    }
 }
 
 // ============================================================================

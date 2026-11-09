@@ -78,3 +78,29 @@ void Stm32IcsBus::exchange(la::IcsExchange& x) {
         }
     }
 }
+
+// Mode TOOL (Fase 4A): satu transaksi di satu bus. Hanya dipanggil saat robot di mode 830
+// (servo free), jadi boleh memblokir ISR kontrol beberapa ms.
+int Stm32IcsBus::transact(uint8_t bus, const uint8_t* tx, uint8_t txLen, uint8_t* rx, uint8_t rxMax,
+                          uint8_t want, uint32_t timeoutUs) {
+    if (bus > 1) return 0;
+    USART_TypeDef* u = BUS[bus].u;
+    while (u->ISR & USART_ISR_RXNE_RXFNE) (void)u->RDR;
+    u->ICR = USART_ICR_ORECF | USART_ICR_FECF | USART_ICR_PECF | USART_ICR_NECF | USART_ICR_TCCF;
+    dirTx(bus, true);
+    for (uint8_t i = 0; i < txLen; ++i) {
+        while (!(u->ISR & USART_ISR_TXE_TXFNF)) {}
+        u->TDR = tx[i];
+    }
+    const int64_t txDeadline = la_micros() + 200;
+    while (!(u->ISR & USART_ISR_TC) && la_micros() < txDeadline) {}
+    dirTx(bus, false);
+    size_t n = 0;
+    const int64_t deadline = la_micros() + (int64_t)timeoutUs;
+    while (n < rxMax && la_micros() < deadline) {
+        if (u->ISR & USART_ISR_ORE) u->ICR = USART_ICR_ORECF;
+        while (n < rxMax && (u->ISR & USART_ISR_RXNE_RXFNE)) rx[n++] = (uint8_t)u->RDR;
+        if (la::ics::replyComplete(rx, n, tx, txLen, want)) break;
+    }
+    return (int)n;
+}

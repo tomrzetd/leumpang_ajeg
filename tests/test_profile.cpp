@@ -118,5 +118,28 @@ int main() {
         CHECK(tm.mode == Mode::READY && g_log.find("generic") != std::string::npos, "profil generic: GO (gait) ditolak");
         CHECK(g_log.find("/4 posisi servo") != std::string::npos, "boot sync menghitung servo terpasang saja");
     }
+
+    // ---- frame ICS 3.5 alat servo: dengan & tanpa echo ----
+    {
+        uint8_t tx[4], v[64];
+        ics::buildRead(tx, 5, ics::SC_STRETCH);
+        const uint8_t r1[] = {0x25, 1, 60};
+        const uint8_t r2[] = {0xA5, 1, 0x25, 1, 60};
+        CHECK(ics::parseRead(r1, 3, tx, 1, v) && v[0] == 60, "READ tanpa echo");
+        CHECK(ics::parseRead(r2, 5, tx, 1, v) && v[0] == 60, "READ dengan echo");
+        const uint8_t wrongId[] = {0x26, 1, 60};
+        CHECK(!ics::parseRead(wrongId, 3, tx, 1, v), "READ ID salah ditolak");
+        ics::buildWrite(tx, 5, ics::SC_SPEED, 100);
+        const uint8_t w1[] = {0x45, 2, 100};
+        CHECK(ics::parseWrite(w1, 3, tx) && !ics::parseWrite(w1, 2, tx), "WRITE reply 0x40|id");
+        uint8_t id = 0;
+        ics::buildIdRead(tx);
+        const uint8_t i1[] = {0xE7};
+        const uint8_t i2[] = {0xFF, 0, 0, 0, 0xE7};
+        CHECK(ics::parseId(i1, 1, tx, &id) && id == 7 && ics::parseId(i2, 5, tx, &id) && id == 7, "ID read (echo/tanpa)");
+        CHECK(!ics::replyComplete(i2, 4, tx, 4, 1) && ics::replyComplete(i2, 5, tx, 4, 1), "replyComplete menghitung echo");
+        CHECK(ics::paramWritable(3, 63) && !ics::paramWritable(3, 64) && !ics::paramWritable(0, 1) && !ics::paramWritable(1, 0),
+              "rentang tulis parameter");
+    }
     return checkSummary("test_profile");
 }

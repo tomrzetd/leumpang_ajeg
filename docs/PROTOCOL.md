@@ -55,7 +55,7 @@ Satuan: sudut **derajat** (f32), panjang **mm**, waktu **ms** kecuali disebut.
 | 12 | GAIT_STATE | robot→host | `f32 fwct, fwctEnd, dxi, dyi, dxis, dyis, autoH, fh, swx, swy, swMax, waist; i8 jikuasi; i16 kin[22]` (93 B) |
 | 13 | CONFIG | robot→host | `u8 n, f32 value[n], u32 cfgGen, u32 savedGen` — urutan = ParamId |
 | 14 | LOG | robot→host | teks UTF-8 (tanpa NUL) |
-| 20 | CMD | host→robot | `u8 cmd`: 0 reset, 1 go, 2 stop (servo free), 3 kalibrasi IMU, 4 kirim CONFIG, 5 kirim HELLO, 6 kirim MOTION_STATUS |
+| 20 | CMD | host→robot | `u8 cmd`: 0 reset, 1 go, 2 stop (servo free), 3 kalibrasi IMU, 4 kirim CONFIG, 5 kirim HELLO, 6 kirim MOTION_STATUS, 7 reboot (hanya READY/FALLEN/RAW/TOOL; ~300 ms setelah ACK) |
 | 21 | SET_PARAM | host→robot | `u8 param, f32 value` |
 | 22 | SET_TRIM | host→robot | `u8 bus, u8 slot, i16 value` (±1000, hanya diterapkan di READY) |
 | 23 | STREAM_CFG | host→robot | `u8 teleHz(0–50), u8 servoHz(0–20), u8 gaitHz(0–50), u8 logOn` |
@@ -68,6 +68,15 @@ Satuan: sudut **derajat** (f32), panjang **mm**, waktu **ms** kecuali disebut.
 | 60 | EXT | ↔ | `u16 topic, u8 data[≤238]` — Leumpang Bus di atas LAP (§3.7, [BUS.md](BUS.md)) |
 | 45 | POSE_TARGET | host→robot | `u32 mask, u16 ttlMs, i16 joint[2][11]` (50 B) — pose langsung, mode 820 (§3.5) |
 | 44 | MOTION_STATUS | robot→host | 4 × (`u8 state, u8 nFrames, char name[16]`) (72 B); state 0 kosong, 1 menulis, 2 siap, 3 diputar |
+| 46 | SERVO_TOOL | host→robot | `u8 req, u8 op, u8 bus, u8 id, u8 sc, u8 arg` — alat servo ICS, mode 830 (§3.9) |
+| 47 | SERVO_TOOL_RESULT | robot→host | `u8 req, u8 op, u8 status, u8 bus, u8 id, i32 value, u8 len, u8 data[len≤64]` |
+| 80 | FILE_LIST | host→robot | `u8 req, u16 start, path` → FILE_ENTRIES (§3.8) |
+| 81 | FILE_READ | host→robot | `u8 req, u32 offset, u8 len(≤200), path` → FILE_DATA |
+| 82 | FILE_WRITE | host→robot | `u8 req, u32 offset, u8 flags(bit0 truncate), u8 pathLen, path, data` → FILE_RESULT |
+| 83–86 | FILE_DELETE / MKDIR / RENAME / STAT | host→robot | `u8 req, path` (RENAME: `u8 req, u8 lenA, a, b`) → FILE_RESULT |
+| 88 | FILE_ENTRIES | robot→host | `u8 req, u8 status, u16 start, u8 count(≤4), u8 more`, count × (`u8 dir, u32 size, u8 len, name`) |
+| 89 | FILE_DATA | robot→host | `u8 req, u8 status, u32 offset, data` |
+| 8A | FILE_RESULT | robot→host | `u8 req, u8 status, u32 value, u8 extra` (WRITE: value = offset akhir; STAT: value = ukuran, extra = 1 folder) |
 | 70 | SIM_IMU | host→sim | `f32 roll, f32 pitch, u8 sensorOk` |
 | 71 | SIM_FAULT | host→sim | `u8 bus, u8 slot, u8 dead` |
 
@@ -75,11 +84,12 @@ Satuan: sudut **derajat** (f32), panjang **mm**, waktu **ms** kecuali disebut.
 
 * `role`: 0 robot, 1 phone, 2 desktop, 3 sim, 4 tool
 * `board`: 0 unknown, 1 esp32s3, 2 esp32p4, 3 stm32h562, 4 sim
-* `caps` (bit): 0 Wi-Fi, 1 SD, 2 gait intent, 3 motion, 4 sim, 5 LCD, 6 USB CDC, 7 live pose, 8 perception, 9 EXT
+* `caps` (bit): 0 Wi-Fi, 1 SD, 2 gait intent, 3 motion, 4 sim, 5 LCD, 6 USB CDC, 7 live pose, 8 perception, 9 EXT,
+  10 berkas SD (FILE_*), 11 profil robot dari SD, 12 alat servo (SERVO_TOOL)
 * `flags` TELEMETRY (bit): 0 IMU fresh, 1 IMU init, 2 kalibrasi selesai, 3 persist pending, 4 kaki tumpu kiri, 5 niat gait aktif, 6 langkah maju diblokir rintangan
 * `status` ACK: 0 OK, 1 BAD_LEN, 2 UNSUPPORTED, 3 REJECTED_STATE, 4 BUSY, 5 BAD_VALUE
 * `mode`: 700 RAW, 705 FALLEN, 710 RESET, 720 READY, 730 BALANCE, 740–770 langkah, 780 POSE_HOLD, 790 ANGLE, 791 MIRROR,
-  800 WALK_CONT (gait kontinu, eksperimental), 810 MOTION_PLAY, 820 LIVE_POSE
+  800 WALK_CONT (gait kontinu, eksperimental), 810 MOTION_PLAY, 820 LIVE_POSE, 830 TOOL (alat servo)
 * `param`: 0 fallDeg, 1 rearmDeg, 2 imuStaleMs, 3 servoStep, 4 trigRollDeg, 5 trigPitchDeg, 6 footLift,
   7 swayBase, 8 swayGain, 9 rollSign, 10 pitchSign, 11 imuSwap,
   12 gaitEnable (0/1, default 0), 13 gaitStepMax (mm/langkah, default 10, maks 25),
@@ -146,6 +156,58 @@ tidak bisa mengunci robot. Arah & jarak orang ikut dikirim untuk modul masa depa
 Kanal umum untuk modul/sensor tambahan: `topic` 16 bit (`0x0000–0x0FFF` core, `0x0001` = echo uji; `0x1000+` pengguna).
 Host→robot dijawab `ACK OK` bila `extHook` HAL menerima, `BAD_VALUE` bila menolak, `UNSUPPORTED` bila HAL tidak memasang hook.
 Robot→host lewat `LapEndpoint::sendExt()`. Di HP muncul sebagai topik bus `robot/ext/<hhhh>`.
+
+### 3.8 Berkas SD (Fase 4A)
+
+Robot dengan `CAP_FILES` membuka kartu SD lewat LAP: skrip, pose, rekaman, profil. `req` dipilih host dan
+dipantulkan di balasan (bukan ACK), jadi beberapa permintaan bisa berjalan bersamaan.
+Jalur relatif terhadap akar SD, karakter `A–Z a–z 0–9 _ - . /` saja, maks 95 karakter; `..` dan `\` ditolak
+(`BAD_PATH`). Nama berkas maks 47 karakter. Folder standar dibuat saat boot:
+`motions/ bbx/ config/ scripts/ poses/ rec/`.
+
+`status`: 0 OK, 1 NOT_FOUND, 2 IO, 3 BAD_PATH, 4 NO_SD, 5 DENIED, 6 EXISTS.
+Unggah berkas besar: FILE_WRITE berurutan (offset 0 dengan truncate, lalu tanpa), potongan ≤ 160 B.
+Unduh: FILE_STAT untuk ukuran, lalu FILE_READ ≤ 200 B per permintaan.
+
+```bash
+python3 tools/lapctl.py --tcp 192.168.4.1 ls scripts
+python3 tools/lapctl.py --tcp 192.168.4.1 put jalan.py scripts/jalan.py
+python3 tools/lapctl.py --tcp 192.168.4.1 profile put robot.json && python3 tools/lapctl.py --tcp 192.168.4.1 cmd reboot
+```
+
+Profil robot (`config/robot.json`) dijelaskan di [PROFILE.md](PROFILE.md); profil baru berlaku setelah `CMD 7` (reboot).
+
+### 3.9 Alat servo ICS 3.5 (SERVO_TOOL, mode 830)
+
+Untuk mencari, memberi ID, dan menyetel servo tanpa ICS Manager. **Hanya bisa dimasuki dari FALLEN**
+(`CMD stop` dulu, robot di stand): servo sudah free, jadi robot tidak ambruk mendadak. Selama TOOL,
+controller tidak mengirim frame posisi; satu operasi dijalankan per siklus 10 ms. `CMD reset` ditolak;
+keluar dengan `TOOL_EXIT` atau `CMD stop` → FALLEN, lalu reset seperti biasa.
+
+| op | Nama | Argumen | `value` / `data` hasil |
+|---|---|---|---|
+| 1 | ENTER | — | — |
+| 2 | EXIT | — | — |
+| 3 | SCAN | — | `data` = `u32 maskR, u32 maskL` (bit = ID menjawab), ~0,35 s |
+| 4 | READ_ID | bus | ID. **Hanya satu servo boleh terpasang di bus itu** |
+| 5 | WRITE_ID | bus, `arg` = ID baru (0..31) | ID baru. Sama: satu servo saja |
+| 6 | READ_PARAM | bus, id, `sc` 1 stretch, 2 speed, 3 arus, 4 suhu | nilai 0..127 |
+| 7 | WRITE_PARAM | bus, id, `sc`, `arg` (stretch/speed/suhu 1..127, arus 1..63) | nilai tertulis (RAM servo; hilang saat daya mati) |
+| 8 | READ_EEPROM | bus, id | `data` = 64 byte mentah (nibble) |
+| 9 | READ_POS | bus, id | posisi 14-bit (servo tetap free) |
+
+`status`: 0 OK, 1 BAD_MODE (bukan TOOL / masuk bukan dari FALLEN), 2 NO_REPLY, 3 BAD_ARG,
+4 UNSUPPORTED (HAL tanpa transaksi), 5 BUSY (operasi lain/SCAN berjalan). Hanya satu permintaan
+SERVO_TOOL yang ditunggu sekaligus; tanpa hasil dalam 2 s robot menjawab NO_REPLY.
+Menulis EEPROM sengaja tidak didukung (risiko servo tak bisa dipakai); pakai ICS Manager untuk itu.
+
+```bash
+python3 tools/lapctl.py --tcp 192.168.4.1 cmd stop
+python3 tools/lapctl.py --tcp 192.168.4.1 servo scan
+python3 tools/lapctl.py --tcp 192.168.4.1 servo get R 3 stretch
+python3 tools/lapctl.py --tcp 192.168.4.1 servo setid L 5      # satu servo saja di bus L
+python3 tools/lapctl.py --tcp 192.168.4.1 servo exit
+```
 
 ### 3.4 Blackbox SD
 

@@ -98,7 +98,8 @@ void LapEndpoint::handle(const Packet& p, uint32_t nowMs) {
                 case CMD_REBOOT: {
                     // hanya saat robot diam: servo bebas di FALLEN / RAW / READY
                     Telemetry t{}; if (h_.snapshot) h_.snapshot(h_.ctx, t);
-                    const bool still = t.mode == Mode::READY || t.mode == Mode::FALLEN || t.mode == Mode::RAW_ANGLES;
+                    const bool still = t.mode == Mode::READY || t.mode == Mode::FALLEN || t.mode == Mode::RAW_ANGLES ||
+                                       t.mode == Mode::TOOL;
                     if (!h_.reboot) { ack(p, UNSUPPORTED); return; }
                     if (!still) { ack(p, REJECTED_STATE); return; }
                     ack(p, OK);
@@ -109,6 +110,19 @@ void LapEndpoint::handle(const Packet& p, uint32_t nowMs) {
                 default: ack(p, BAD_VALUE); return;
             }
             submit(c);
+            return;
+        }
+        case SERVO_TOOL: {
+            // body: req, op, bus, id, sc, arg -> SERVO_TOOL_RESULT (bukan ACK)
+            Reader r(p.body, p.len);
+            Command c{}; c.type = CmdType::SERVO_TOOL;
+            c.toolReq = r.u8(); c.toolOp = r.u8(); c.bus = r.u8(); c.toolId = r.u8(); c.toolSc = r.u8(); c.toolArg = r.u8();
+            if (!r.ok()) { ack(p, BAD_LEN); return; }
+            if (!h_.snapshot || !h_.submit) { toolReply(c.toolReq, c.toolOp, TOOL_UNSUPPORTED, c.bus, c.toolId, 0, nullptr, 0); return; }
+            if (toolWait_) { toolReply(c.toolReq, c.toolOp, TOOL_BUSY, c.bus, c.toolId, 0, nullptr, 0); return; }
+            h_.snapshot(h_.ctx, snap_);
+            if (!h_.submit(h_.ctx, c)) { toolReply(c.toolReq, c.toolOp, TOOL_BUSY, c.bus, c.toolId, 0, nullptr, 0); return; }
+            toolWait_ = true; toolReq_ = c.toolReq; toolSeq0_ = snap_.toolSeq; toolSinceMs_ = nowMs;
             return;
         }
         case SET_PARAM: {
@@ -230,6 +244,17 @@ void LapEndpoint::poll(uint32_t nowMs) {
     if (rebootAtMs_ && (int32_t)(nowMs - rebootAtMs_) >= 0) { rebootAtMs_ = 0; if (h_.reboot) h_.reboot(h_.ctx); }
     if (active_ && nowMs - lastRxMs_ > LINK_TIMEOUT_MS) active_ = false;
     if (!active_ || !h_.snapshot) return;
+    if (toolWait_) {
+        h_.snapshot(h_.ctx, snap_);
+        if (snap_.toolSeq != toolSeq0_ && snap_.toolReq == toolReq_) {
+            toolWait_ = false;
+            toolReply(snap_.toolReq, snap_.toolOp, snap_.toolStatus, snap_.toolBus, snap_.toolId, snap_.toolValue,
+                      snap_.toolData, snap_.toolLen);
+        } else if (nowMs - toolSinceMs_ > 2000) {              // SCAN ~0,35 s; lebih dari 2 s = hilang
+            toolWait_ = false;
+            toolReply(toolReq_, 0, TOOL_NO_REPLY, 0, 0, 0, nullptr, 0);
+        }
+    }
     const bool tele  = stream_.teleHz  && nowMs - lastTele_  >= 1000u / stream_.teleHz;
     const bool servo = stream_.servoHz && nowMs - lastServo_ >= 1000u / stream_.servoHz;
     const bool gait  = stream_.gaitHz  && nowMs - lastGait_  >= 1000u / stream_.gaitHz;
@@ -240,6 +265,19 @@ void LapEndpoint::poll(uint32_t nowMs) {
     if (servo) { ServoStateMsg m; fillServoState(snap_, m);       send(SERVO_STATE, m); lastServo_ = nowMs; }
     if (gait)  { GaitStateMsg m;  fillGaitState(snap_, m);        send(GAIT_STATE, m);  lastGait_ = nowMs; }
     if (snap_.cfgGen != lastCfgGen_) sendConfig();      // config berubah -> broadcast
+}
+
+void LapEndpoint::toolReply(uint8_t req, uint8_t op, uint8_t status, uint8_t bus, uint8_t id, int32_t value,
+                            const uint8_t* d, uint8_t len) {
+    // body: req, op, status, bus, id, i32 value, u8 len, data[len]
+    Packet o; o.type = SERVO_TOOL_RESULT; o.seq = seq_++;
+    Writer w(o.body, MAX_BODY);
+    w.u8(req); w.u8(op); w.u8(status); w.u8(bus); w.u8(id); w.u32((uint32_t)value);
+    if (len > 64) len = 64;
+    w.u8(len);
+    for (uint8_t i = 0; i < len; ++i) w.u8(d[i]);
+    o.len = (uint8_t)w.size();
+    sendPacket(o);
 }
 
 bool LapEndpoint::sendExt(uint16_t topic, const uint8_t* d, size_t n) {

@@ -148,7 +148,86 @@ def main():
             sim.kill()
 
 
+def test_lapctl(sim_path):
+    """Fase 4A: lapctl (berkas SD, profil, alat servo) melawan leumpang_sim --sd."""
+    import json
+    import shutil
+    import tempfile
+    sd = tempfile.mkdtemp(prefix="la_sd_")
+    work = tempfile.mkdtemp(prefix="la_work_")
+    port = free_port()
+    sim = subprocess.Popen([sim_path, "--port", str(port), "--no-stdin", "--quiet", "--seconds", "30", "--sd", sd],
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    lapctl = os.path.join(os.path.dirname(__file__), "..", "tools", "lapctl.py")
+
+    def run(*args):
+        r = subprocess.run([sys.executable, lapctl, "--tcp", f"127.0.0.1:{port}", *args], cwd=work,
+                           capture_output=True, text=True, timeout=20)
+        return r.returncode, r.stdout + r.stderr
+
+    try:
+        for _ in range(50):
+            try:
+                socket.create_connection(("127.0.0.1", port), timeout=1).close()
+                break
+            except OSError:
+                time.sleep(0.1)
+        rc, out = run("hello")
+        check(rc == 0 and "caps=" in out and int(out.split("caps=0x")[1][:8], 16) & lap.CAP_FILES, "lapctl hello: CAP_FILES")
+        script = b"import leumpang\n" + bytes(range(32, 127)) * 5 + b"\n"
+        open(os.path.join(work, "jalan.py"), "wb").write(script)
+        rc, _ = run("mkdir", "scripts")
+        rc2, _ = run("put", "jalan.py", "scripts/jalan.py")
+        check(rc == 0 and rc2 == 0 and open(os.path.join(sd, "scripts", "jalan.py"), "rb").read() == script,
+              f"lapctl put ({len(script)} B, multi-chunk) tersimpan di SD")
+        rc, out = run("ls", "scripts")
+        check(rc == 0 and "jalan.py" in out and str(len(script)) in out, "lapctl ls")
+        os.remove(os.path.join(work, "jalan.py"))
+        rc, _ = run("get", "scripts/jalan.py")
+        check(rc == 0 and open(os.path.join(work, "jalan.py"), "rb").read() == script, "lapctl get identik")
+        rc, _ = run("mv", "scripts/jalan.py", "scripts/b.py")
+        rc2, _ = run("rm", "scripts/b.py")
+        check(rc == 0 and rc2 == 0 and not os.listdir(os.path.join(sd, "scripts")), "lapctl mv + rm")
+        rc, out = run("get", "../etc/passwd")
+        check(rc != 0 and "BAD_PATH" in out, "jalur di luar SD ditolak")
+
+        prof = {"name": "lengan-uji", "kind": "generic",
+                "servos": [{"bus": 0, "slot": 0, "id": 0, "name": "BASE", "model": "KRS-3304"}]}
+        open(os.path.join(work, "p.json"), "w").write(json.dumps(prof))
+        rc, _ = run("profile", "put", "p.json")
+        check(rc == 0 and json.load(open(os.path.join(sd, "config", "robot.json")))["name"] == "lengan-uji",
+              "lapctl profile put -> config/robot.json")
+        open(os.path.join(work, "rusak.json"), "w").write("{ bukan json")
+        rc, _ = run("profile", "put", "rusak.json")
+        check(rc != 0, "profil dengan sintaks rusak tidak diunggah")
+
+        time.sleep(1.5)                                        # tunggu READY
+        rc, out = run("servo", "scan")
+        check(rc != 0 and "BAD_MODE" in out, "servo scan dari READY ditolak")
+        run("cmd", "stop")
+        rc, out = run("servo", "scan")
+        check(rc == 0 and out.count("11 servo") == 2, "servo scan: 11 + 11 servo")
+        rc, out = run("servo", "set", "R", "3", "speed", "90")
+        rc2, out2 = run("servo", "get", "R", "3", "speed")
+        check(rc == 0 and rc2 == 0 and "speed = 90" in out2, "servo set/get speed")
+        rc, out = run("servo", "id", "L")
+        check(rc != 0 and "NO_REPLY" in out, "baca ID dengan banyak servo = NO_REPLY")
+        rc, out = run("servo", "eeprom", "L", "2")
+        check(rc == 0 and out.count("\n") >= 4, "servo eeprom (64 nibble)")
+        rc, _ = run("servo", "exit")
+        check(rc == 0, "servo exit -> FALLEN")
+    finally:
+        sim.terminate()
+        try:
+            sim.wait(3)
+        except subprocess.TimeoutExpired:
+            sim.kill()
+        shutil.rmtree(sd, ignore_errors=True)
+        shutil.rmtree(work, ignore_errors=True)
+
+
 if __name__ == "__main__":
     main()
+    test_lapctl(sys.argv[1])
     print(f"== test_lap_py: {'LULUS' if fails == 0 else f'{fails} GAGAL'}")
     sys.exit(1 if fails else 0)
